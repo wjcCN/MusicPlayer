@@ -1,0 +1,31 @@
+QWidget {
+    font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    font-size: 13px;
+}
+
+QLabel#sectionTitle {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 4px 0;
+}
+
+QLabel#nowPlaying {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+QPushButton {
+    min-height: 30px;
+    padding: 4px 12px;
+}
+
+QLineEdit,
+QComboBox {
+    min-height: 30px;
+}
+
+QTableWidget {
+    gridline-color: #dadde3;
+    selection-background-color: #dbeafe;
+    selection-color: #111827;
+}
