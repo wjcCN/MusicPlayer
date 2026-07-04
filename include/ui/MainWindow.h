@@ -18,9 +18,11 @@
 class QCloseEvent;
 class QEvent;
 class FullscreenVideoWindow;
+class QBoxLayout;
 class QFrame;
 class QGroupBox;
 class QKeyEvent;
+class QResizeEvent;
 class QStackedWidget;
 class QTimer;
 class QVideoWidget;
@@ -37,6 +39,7 @@ public:
 protected:
     void closeEvent(QCloseEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     enum class Language
@@ -145,6 +148,7 @@ private:
     void seekRelative(qint64 deltaMs);
     void setCoverFromImage(const QImage &image);
     void setCoverFromPixmap(const QPixmap &pixmap);
+    void updateResponsiveLayout();
     QPixmap coverFromSidecarFile(const MusicTrack &track) const;
     QPixmap defaultCoverPixmap() const;
     QString text(TextKey key) const;
@@ -190,6 +194,10 @@ private:
     QListWidget *m_lyricsList = nullptr;
     QTableWidget *m_libraryTable = nullptr;
     QStackedWidget *m_mediaStack = nullptr;
+    QBoxLayout *m_headerLayout = nullptr;
+    QBoxLayout *m_contentLayout = nullptr;
+    QFrame *m_libraryPanel = nullptr;
+    QFrame *m_nowPlayingPanel = nullptr;
     QVideoWidget *m_videoWidget = nullptr;
     VideoStateOverlay *m_videoStateOverlay = nullptr;
     FullscreenVideoWindow *m_fullscreenWindow = nullptr;

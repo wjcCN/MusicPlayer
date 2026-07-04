@@ -7,6 +7,7 @@
 
 #include <QAbstractItemView>
 #include <QApplication>
+#include <QBoxLayout>
 #include <QCloseEvent>
 #include <QDir>
 #include <QEvent>
@@ -24,6 +25,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QShortcut>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QStackedWidget>
@@ -60,6 +62,12 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QWidget::closeEvent(event);
 }
 
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateResponsiveLayout();
+}
+
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
     const bool isVideoEventSource = watched == m_videoWidget;
@@ -94,6 +102,7 @@ void MainWindow::buildUi()
 {
     setObjectName("appRoot");
     setWindowTitle(text(TextKey::WindowTitle));
+    setMinimumSize(620, 360);
     resize(1360, 820);
 
     m_appTitleLabel = new QLabel(this);
@@ -128,10 +137,10 @@ void MainWindow::buildUi()
     headerTextLayout->addWidget(m_appTitleLabel);
     headerTextLayout->addWidget(m_appSubtitleLabel);
 
-    auto *headerLayout = new QHBoxLayout;
-    headerLayout->setSpacing(16);
-    headerLayout->addLayout(headerTextLayout, 1);
-    headerLayout->addWidget(m_settingsBox);
+    m_headerLayout = new QBoxLayout(QBoxLayout::LeftToRight);
+    m_headerLayout->setSpacing(16);
+    m_headerLayout->addLayout(headerTextLayout, 1);
+    m_headerLayout->addWidget(m_settingsBox);
 
     m_addFolderButton = new QPushButton(this);
     m_addFolderButton->setObjectName("primaryButton");
@@ -161,18 +170,20 @@ void MainWindow::buildUi()
     m_libraryTable->setSelectionMode(QAbstractItemView::SingleSelection);
     m_libraryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_libraryTable->setAlternatingRowColors(false);
-    m_libraryTable->horizontalHeader()->setStretchLastSection(true);
+    m_libraryTable->horizontalHeader()->setStretchLastSection(false);
     m_libraryTable->horizontalHeader()->setSectionResizeMode(TitleColumn, QHeaderView::Stretch);
-    m_libraryTable->horizontalHeader()->setSectionResizeMode(PathColumn, QHeaderView::ResizeToContents);
+    m_libraryTable->horizontalHeader()->setSectionResizeMode(PathColumn, QHeaderView::Interactive);
     m_libraryTable->setColumnWidth(FavoriteColumn, 58);
     m_libraryTable->setColumnWidth(TypeColumn, 72);
     m_libraryTable->setColumnWidth(DurationColumn, 90);
+    m_libraryTable->setColumnWidth(PathColumn, 180);
     m_libraryTable->setShowGrid(false);
     m_libraryTable->verticalHeader()->setDefaultSectionSize(44);
 
-    auto *libraryPanel = new QFrame(this);
-    libraryPanel->setObjectName("libraryPanel");
-    auto *libraryLayout = new QVBoxLayout(libraryPanel);
+    m_libraryPanel = new QFrame(this);
+    m_libraryPanel->setObjectName("libraryPanel");
+    m_libraryPanel->setMinimumWidth(0);
+    auto *libraryLayout = new QVBoxLayout(m_libraryPanel);
     libraryLayout->setContentsMargins(18, 16, 18, 18);
     libraryLayout->setSpacing(12);
     libraryLayout->addWidget(m_libraryTitleLabel);
@@ -181,7 +192,7 @@ void MainWindow::buildUi()
 
     m_coverLabel = new QLabel(this);
     m_coverLabel->setObjectName("coverArt");
-    m_coverLabel->setMinimumSize(CoverSize, CoverSize);
+    m_coverLabel->setMinimumSize(180, 180);
     m_coverLabel->setAlignment(Qt::AlignCenter);
     m_coverLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
@@ -207,8 +218,8 @@ void MainWindow::buildUi()
 
     m_mediaStack = new QStackedWidget(this);
     m_mediaStack->setObjectName("mediaStack");
-    m_mediaStack->setMinimumSize(360, 260);
-    m_mediaStack->setMaximumHeight(340);
+    m_mediaStack->setMinimumSize(240, 180);
+    m_mediaStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_mediaStack->addWidget(m_coverLabel);
     m_mediaStack->addWidget(m_videoWidget);
 
@@ -252,12 +263,13 @@ void MainWindow::buildUi()
     m_lyricsList->setSelectionMode(QAbstractItemView::NoSelection);
     m_lyricsList->setFocusPolicy(Qt::NoFocus);
 
-    auto *nowPlayingPanel = new QFrame(this);
-    nowPlayingPanel->setObjectName("panel");
-    auto *nowPlayingLayout = new QVBoxLayout(nowPlayingPanel);
+    m_nowPlayingPanel = new QFrame(this);
+    m_nowPlayingPanel->setObjectName("panel");
+    m_nowPlayingPanel->setMinimumWidth(0);
+    auto *nowPlayingLayout = new QVBoxLayout(m_nowPlayingPanel);
     nowPlayingLayout->setContentsMargins(22, 20, 22, 20);
     nowPlayingLayout->setSpacing(14);
-    nowPlayingLayout->addWidget(m_mediaStack, 0);
+    nowPlayingLayout->addWidget(m_mediaStack, 2);
     nowPlayingLayout->addWidget(m_videoControlsFrame);
     nowPlayingLayout->addWidget(m_trackTitleLabel);
     nowPlayingLayout->addWidget(m_trackArtistLabel);
@@ -265,10 +277,10 @@ void MainWindow::buildUi()
     nowPlayingLayout->addWidget(m_lyricsTitleLabel);
     nowPlayingLayout->addWidget(m_lyricsList, 1);
 
-    auto *contentLayout = new QHBoxLayout;
-    contentLayout->setSpacing(18);
-    contentLayout->addWidget(libraryPanel, 3);
-    contentLayout->addWidget(nowPlayingPanel, 2);
+    m_contentLayout = new QBoxLayout(QBoxLayout::LeftToRight);
+    m_contentLayout->setSpacing(18);
+    m_contentLayout->addWidget(m_libraryPanel, 3);
+    m_contentLayout->addWidget(m_nowPlayingPanel, 2);
 
     m_nowPlayingLabel = new QLabel(this);
     m_nowPlayingLabel->setObjectName("nowPlaying");
@@ -329,11 +341,26 @@ void MainWindow::buildUi()
     m_playerBox->setObjectName("playerBox");
     m_playerBox->setLayout(playerLayout);
 
+    auto *scrollContent = new QWidget(this);
+    scrollContent->setObjectName("scrollContent");
+    auto *scrollContentLayout = new QVBoxLayout(scrollContent);
+    scrollContentLayout->setContentsMargins(0, 0, 0, 0);
+    scrollContentLayout->setSpacing(18);
+    scrollContentLayout->addLayout(m_headerLayout);
+    scrollContentLayout->addLayout(m_contentLayout, 1);
+
+    auto *mainScrollArea = new QScrollArea(this);
+    mainScrollArea->setObjectName("mainScrollArea");
+    mainScrollArea->setWidgetResizable(true);
+    mainScrollArea->setFrameShape(QFrame::NoFrame);
+    mainScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    mainScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    mainScrollArea->setWidget(scrollContent);
+
     auto *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(22, 20, 22, 20);
     mainLayout->setSpacing(18);
-    mainLayout->addLayout(headerLayout);
-    mainLayout->addLayout(contentLayout, 1);
+    mainLayout->addWidget(mainScrollArea, 1);
     mainLayout->addWidget(m_playerBox);
     setLayout(mainLayout);
 
@@ -342,6 +369,7 @@ void MainWindow::buildUi()
     showNoLyrics();
     applyTheme();
     applyLanguage();
+    updateResponsiveLayout();
 }
 
 void MainWindow::connectSignals()
@@ -1085,6 +1113,32 @@ void MainWindow::setCoverFromPixmap(const QPixmap &pixmap)
     painter.end();
 
     m_coverLabel->setPixmap(rounded);
+}
+
+void MainWindow::updateResponsiveLayout()
+{
+    const int windowWidth = width();
+    const bool compactHeader = windowWidth < 780;
+    const bool stackedContent = windowWidth < 980;
+
+    if (m_headerLayout) {
+        m_headerLayout->setDirection(compactHeader ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+        m_headerLayout->setSpacing(compactHeader ? 10 : 16);
+    }
+
+    if (m_contentLayout && m_libraryPanel && m_nowPlayingPanel) {
+        m_contentLayout->setDirection(stackedContent ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+        m_contentLayout->setStretchFactor(m_libraryPanel, stackedContent ? 1 : 3);
+        m_contentLayout->setStretchFactor(m_nowPlayingPanel, stackedContent ? 1 : 2);
+    }
+
+    if (m_mediaStack) {
+        m_mediaStack->setMinimumSize(stackedContent ? QSize(220, 150) : QSize(240, 180));
+    }
+
+    if (m_libraryTable) {
+        m_libraryTable->setColumnWidth(PathColumn, stackedContent ? 150 : 180);
+    }
 }
 
 QPixmap MainWindow::coverFromSidecarFile(const MusicTrack &track) const
