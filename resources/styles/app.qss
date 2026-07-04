@@ -26,7 +26,7 @@ QDialog#folderManagerDialog {
 }
 
 QDialog#fullscreenVideoWindow {
-    background-color: #000000;
+    background-color: @fullscreenWindowBg;
 }
 
 QLabel#appTitle {
@@ -235,6 +235,26 @@ QListWidget#lyricsList::item:selected {
     background: transparent;
 }
 
+QMenu {
+    background-color: @menuBg;
+    color: @text;
+    border: 1px solid @borderStrong;
+    border-radius: 12px;
+    padding: 6px;
+}
+
+QMenu::item {
+    color: @text;
+    background: transparent;
+    border-radius: 8px;
+    padding: 8px 18px;
+}
+
+QMenu::item:selected {
+    color: @heading;
+    background-color: @menuItemHover;
+}
+
 QLabel#statusLabel[state="ok"] {
     color: @ok;
 }
@@ -262,21 +282,21 @@ QSlider::handle:horizontal {
 }
 
 QWidget#fullscreenControlBar {
-    background-color: rgba(8, 13, 20, 215);
-    border: 1px solid @borderStrong;
+    background-color: @fullscreenControlBg;
+    border: 1px solid @fullscreenBorder;
     border-top: none;
     border-bottom-left-radius: 18px;
     border-bottom-right-radius: 18px;
 }
 
 QFrame#fullscreenVideoFrame {
-    background-color: @panelDeep;
-    border: 2px solid @borderStrong;
+    background-color: @fullscreenFrameBg;
+    border: 1px solid @fullscreenBorder;
     border-radius: 22px;
 }
 
 QFrame#fullscreenVideoFrame:hover {
-    border: 2px solid @accent;
+    border: 1px solid @accent;
 }
 
 QVideoWidget#fullscreenVideoSurface {

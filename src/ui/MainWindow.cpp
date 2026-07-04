@@ -12,6 +12,7 @@
 #include <QBoxLayout>
 #include <QCloseEvent>
 #include <QDir>
+#include <QDesktopServices>
 #include <QEvent>
 #include <QFile>
 #include <QFileDialog>
@@ -187,7 +188,7 @@ void MainWindow::buildUi()
     toolbarLayout->addWidget(m_folderFilterCombo);
     toolbarLayout->addWidget(m_libraryViewCombo);
     toolbarLayout->addWidget(m_iconSizeCombo);
-    toolbarLayout->addWidget(m_searchEdit, 1);
+    toolbarLayout->addStretch(1);
 
     m_libraryTitleLabel = new QLabel(this);
     m_libraryTitleLabel->setObjectName("sectionTitle");
@@ -235,6 +236,7 @@ void MainWindow::buildUi()
     libraryLayout->setSpacing(12);
     libraryLayout->addWidget(m_libraryTitleLabel);
     libraryLayout->addLayout(toolbarLayout);
+    libraryLayout->addWidget(m_searchEdit);
     libraryLayout->addWidget(m_libraryViewStack, 1);
 
     m_coverLabel = new QLabel(this);
@@ -822,6 +824,12 @@ QString MainWindow::themeStyleSheet() const
     style.replace("@accentText", light ? "#0f766e" : "#f8ffff");
     style.replace("@accentSoft", light ? "#ccfbf1" : "#1d5b62");
     style.replace("@selectionBg", light ? "rgba(204, 251, 241, 150)" : "rgba(45, 212, 191, 92)");
+    style.replace("@menuBg", light ? "#ffffff" : "#101826");
+    style.replace("@menuItemHover", light ? "#e6f7f4" : "#1e3144");
+    style.replace("@fullscreenWindowBg", light ? "#10141d" : "#03060b");
+    style.replace("@fullscreenFrameBg", light ? "#111827" : "#050914");
+    style.replace("@fullscreenControlBg", light ? "rgba(17, 24, 39, 232)" : "rgba(8, 13, 20, 232)");
+    style.replace("@fullscreenBorder", light ? "rgba(148, 163, 184, 140)" : "rgba(45, 212, 191, 95)");
     style.replace("@lyricActive", light ? "#0f766e" : "#f7d88f");
     style.replace("@windowBg", light ? "#f4f7fb" : "#0b1018");
     style.replace("@panelDeep", light ? "#eaf0f7" : "#080d14");
@@ -1681,16 +1689,15 @@ void MainWindow::openTrackInFolder(int index) const
     }
 
     const QFileInfo fileInfo(m_filteredTracks.at(index).filePath);
-    const QString nativeFilePath = QDir::toNativeSeparators(fileInfo.absoluteFilePath());
-    const QString nativeFolderPath = QDir::toNativeSeparators(fileInfo.absolutePath());
 
     if (fileInfo.exists()) {
-        QProcess::startDetached(QStringLiteral("explorer.exe"), QStringList{QStringLiteral("/select,") + nativeFilePath});
+        const QString nativeFilePath = QDir::toNativeSeparators(fileInfo.canonicalFilePath());
+        QProcess::startDetached(QStringLiteral("explorer.exe"), QStringList{QStringLiteral("/select,"), nativeFilePath});
         return;
     }
 
     if (QDir(fileInfo.absolutePath()).exists()) {
-        QProcess::startDetached(QStringLiteral("explorer.exe"), QStringList{nativeFolderPath});
+        QDesktopServices::openUrl(QUrl::fromLocalFile(fileInfo.absolutePath()));
     }
 }
 
