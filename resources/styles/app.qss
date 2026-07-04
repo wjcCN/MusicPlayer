@@ -274,3 +274,55 @@ QLabel#fullscreenTimeLabel {
     color: #f8fafc;
     min-width: 110px;
 }
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 12px;
+    margin: 12px 2px 12px 2px;
+    border: none;
+}
+
+QScrollBar::handle:vertical {
+    background: @borderStrong;
+    min-height: 34px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: @accent;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: transparent;
+    border: none;
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 12px;
+    margin: 2px 12px 2px 12px;
+    border: none;
+}
+
+QScrollBar::handle:horizontal {
+    background: @borderStrong;
+    min-width: 34px;
+    border-radius: 6px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: @accent;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal,
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: transparent;
+    border: none;
+    width: 0;
+}

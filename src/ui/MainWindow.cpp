@@ -7,6 +7,7 @@
 
 #include <QAction>
 #include <QAbstractItemView>
+#include <QAudioOutput>
 #include <QApplication>
 #include <QBoxLayout>
 #include <QCloseEvent>
@@ -24,6 +25,8 @@
 #include <QKeySequence>
 #include <QListView>
 #include <QMenu>
+#include <QMediaMetaData>
+#include <QMediaPlayer>
 #include <QListWidgetItem>
 #include <QMessageBox>
 #include <QPainter>
@@ -37,7 +40,10 @@
 #include <QStyle>
 #include <QTableWidgetItem>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
+#include <QVideoFrame>
+#include <QVideoSink>
 #include <QVideoWidget>
 
 namespace
@@ -50,6 +56,8 @@ constexpr int AlbumColumn = 4;
 constexpr int DurationColumn = 5;
 constexpr int PathColumn = 6;
 constexpr int CoverSize = 300;
+constexpr int TrackIndexRole = Qt::UserRole;
+constexpr int TrackPathRole = Qt::UserRole + 1;
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -403,6 +411,7 @@ void MainWindow::buildUi()
     mainLayout->addWidget(m_playerBox);
     setLayout(mainLayout);
 
+    setupArtworkExtractor();
     setCoverFromPixmap(defaultCoverPixmap());
     refreshVideoControls({});
     showNoLyrics();
@@ -940,7 +949,8 @@ void MainWindow::refreshLibraryIconView()
 
         auto *item = new QListWidgetItem(iconForTrack(track), label);
         item->setTextAlignment(Qt::AlignHCenter);
-        item->setData(Qt::UserRole, index);
+        item->setData(TrackIndexRole, index);
+        item->setData(TrackPathRole, artworkKey(track));
         item->setToolTip(QDir::toNativeSeparators(track.filePath));
         item->setSizeHint(QSize(iconSize.width() + 50, iconSize.height() + 78));
         if (!QFileInfo::exists(track.filePath)) {
@@ -973,6 +983,162 @@ void MainWindow::applyIconSize()
     const QSize iconSize = selectedIconExtent();
     m_libraryIconList->setIconSize(iconSize);
     m_libraryIconList->setGridSize(QSize(iconSize.width() + 58, iconSize.height() + 88));
+}
+
+void MainWindow::setupArtworkExtractor()
+{
+    m_artworkPlayer = new QMediaPlayer(this);
+    m_artworkAudioOutput = new QAudioOutput(this);
+    m_artworkVideoSink = new QVideoSink(this);
+    m_artworkTimeoutTimer = new QTimer(this);
+    m_artworkTimeoutTimer->setSingleShot(true);
+
+    m_artworkAudioOutput->setMuted(true);
+    m_artworkAudioOutput->setVolume(0.0f);
+    m_artworkPlayer->setAudioOutput(m_artworkAudioOutput);
+    m_artworkPlayer->setVideoOutput(m_artworkVideoSink);
+
+    connect(m_artworkPlayer, &QMediaPlayer::metaDataChanged, this, [this] {
+        if (m_artworkCurrentKey.isEmpty() || m_artworkCurrentTrack.isVideo) {
+            return;
+        }
+
+        const QMediaMetaData metaData = m_artworkPlayer->metaData();
+        QImage cover = metaData.value(QMediaMetaData::CoverArtImage).value<QImage>();
+        if (cover.isNull()) {
+            cover = metaData.value(QMediaMetaData::ThumbnailImage).value<QImage>();
+        }
+        if (!cover.isNull()) {
+            finishArtworkRequest(QPixmap::fromImage(cover));
+        }
+    });
+
+    connect(m_artworkVideoSink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
+        if (m_artworkCurrentKey.isEmpty() || !m_artworkCurrentTrack.isVideo || !frame.isValid()) {
+            return;
+        }
+
+        const QImage frameImage = frame.toImage();
+        if (!frameImage.isNull()) {
+            finishArtworkRequest(QPixmap::fromImage(frameImage));
+        }
+    });
+
+    connect(m_artworkPlayer, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
+        if (m_artworkCurrentKey.isEmpty()) {
+            return;
+        }
+        if (status == QMediaPlayer::LoadedMedia && m_artworkCurrentTrack.isVideo) {
+            m_artworkPlayer->setPosition(0);
+            m_artworkPlayer->play();
+        } else if (status == QMediaPlayer::InvalidMedia || status == QMediaPlayer::EndOfMedia) {
+            finishArtworkRequest();
+        }
+    });
+
+    connect(m_artworkPlayer, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error, const QString &) {
+        finishArtworkRequest();
+    });
+
+    connect(m_artworkTimeoutTimer, &QTimer::timeout, this, [this] {
+        finishArtworkRequest();
+    });
+}
+
+void MainWindow::requestArtwork(const MusicTrack &track)
+{
+    const QString key = artworkKey(track);
+    if (key.isEmpty() || m_artworkCache.contains(key) || m_artworkRequested.contains(key)) {
+        return;
+    }
+
+    if (!QFileInfo::exists(track.filePath)) {
+        m_artworkRequested.insert(key);
+        return;
+    }
+
+    if (!track.isVideo) {
+        const QPixmap sidecarCover = coverFromSidecarFile(track);
+        if (!sidecarCover.isNull()) {
+            m_artworkCache.insert(key, sidecarCover);
+            m_artworkRequested.insert(key);
+            updateIconForPath(key);
+            return;
+        }
+    }
+
+    m_artworkRequested.insert(key);
+    m_artworkQueue.append(track);
+    startNextArtworkRequest();
+}
+
+void MainWindow::startNextArtworkRequest()
+{
+    if (!m_artworkCurrentKey.isEmpty() || !m_artworkPlayer || m_artworkQueue.isEmpty()) {
+        return;
+    }
+
+    m_artworkCurrentTrack = m_artworkQueue.takeFirst();
+    m_artworkCurrentKey = artworkKey(m_artworkCurrentTrack);
+    const QFileInfo fileInfo(m_artworkCurrentTrack.filePath);
+    if (m_artworkCurrentKey.isEmpty() || !fileInfo.exists()) {
+        m_artworkCurrentTrack = {};
+        m_artworkCurrentKey.clear();
+        startNextArtworkRequest();
+        return;
+    }
+
+    m_artworkPlayer->stop();
+    m_artworkPlayer->setSource(QUrl::fromLocalFile(fileInfo.absoluteFilePath()));
+    if (m_artworkCurrentTrack.isVideo) {
+        m_artworkPlayer->play();
+    }
+    m_artworkTimeoutTimer->start(m_artworkCurrentTrack.isVideo ? 4000 : 2500);
+}
+
+void MainWindow::finishArtworkRequest(const QPixmap &pixmap)
+{
+    if (m_artworkCurrentKey.isEmpty()) {
+        return;
+    }
+
+    const QString completedKey = m_artworkCurrentKey;
+    if (!pixmap.isNull()) {
+        m_artworkCache.insert(completedKey, pixmap);
+    }
+
+    m_artworkCurrentTrack = {};
+    m_artworkCurrentKey.clear();
+
+    if (m_artworkTimeoutTimer) {
+        m_artworkTimeoutTimer->stop();
+    }
+    if (m_artworkPlayer) {
+        m_artworkPlayer->stop();
+        m_artworkPlayer->setSource({});
+    }
+
+    updateIconForPath(completedKey);
+    startNextArtworkRequest();
+}
+
+void MainWindow::updateIconForPath(const QString &filePath)
+{
+    if (!m_libraryIconList || filePath.isEmpty()) {
+        return;
+    }
+
+    for (int row = 0; row < m_libraryIconList->count(); ++row) {
+        QListWidgetItem *item = m_libraryIconList->item(row);
+        if (!item || item->data(TrackPathRole).toString().compare(filePath, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+
+        const int index = iconItemToTrackIndex(item);
+        if (index >= 0) {
+            item->setIcon(iconForTrack(m_filteredTracks.at(index)));
+        }
+    }
 }
 
 void MainWindow::setStatus(const QString &message)
@@ -1392,10 +1558,12 @@ bool MainWindow::trackMatchesFolderFilter(const MusicTrack &track, const QString
         || normalizedTrackPath.startsWith(childPrefix, Qt::CaseInsensitive);
 }
 
-QIcon MainWindow::iconForTrack(const MusicTrack &track) const
+QIcon MainWindow::iconForTrack(const MusicTrack &track)
 {
-    QPixmap pixmap = coverFromSidecarFile(track);
+    const QString key = artworkKey(track);
+    QPixmap pixmap = m_artworkCache.value(key);
     if (pixmap.isNull()) {
+        requestArtwork(track);
         pixmap = defaultCoverPixmap();
     }
 
@@ -1452,6 +1620,15 @@ QSize MainWindow::selectedIconExtent() const
     return QSize(108, 108);
 }
 
+QString MainWindow::artworkKey(const MusicTrack &track) const
+{
+    if (track.filePath.isEmpty()) {
+        return {};
+    }
+
+    return QFileInfo(track.filePath).absoluteFilePath();
+}
+
 void MainWindow::playTrackAt(int index)
 {
     if (index < 0 || index >= m_filteredTracks.size()) {
@@ -1469,7 +1646,7 @@ int MainWindow::iconItemToTrackIndex(QListWidgetItem *item) const
         return -1;
     }
 
-    const int index = item->data(Qt::UserRole).toInt();
+    const int index = item->data(TrackIndexRole).toInt();
     return index >= 0 && index < m_filteredTracks.size() ? index : -1;
 }
 

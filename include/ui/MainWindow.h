@@ -4,6 +4,7 @@
 #include "core/PlaybackController.h"
 #include "data/MusicLibrary.h"
 
+#include <QHash>
 #include <QComboBox>
 #include <QIcon>
 #include <QImage>
@@ -15,9 +16,11 @@
 #include <QPixmap>
 #include <QSize>
 #include <QSlider>
+#include <QSet>
 #include <QTableWidget>
 #include <QWidget>
 
+class QAudioOutput;
 class QCloseEvent;
 class QEvent;
 class FullscreenVideoWindow;
@@ -25,9 +28,11 @@ class QBoxLayout;
 class QFrame;
 class QGroupBox;
 class QKeyEvent;
+class QMediaPlayer;
 class QResizeEvent;
 class QStackedWidget;
 class QTimer;
+class QVideoSink;
 class QVideoWidget;
 class VideoStateOverlay;
 
@@ -158,6 +163,11 @@ private:
     void refreshLibraryIconView();
     void applyLibraryView();
     void applyIconSize();
+    void setupArtworkExtractor();
+    void requestArtwork(const MusicTrack &track);
+    void startNextArtworkRequest();
+    void finishArtworkRequest(const QPixmap &pixmap = QPixmap());
+    void updateIconForPath(const QString &filePath);
     void setStatus(const QString &message);
     void applyPlaybackState(QMediaPlayer::PlaybackState state);
     void updatePositionLabel(qint64 positionMs, qint64 durationMs);
@@ -182,8 +192,9 @@ private:
     LibraryView selectedLibraryView() const;
     IconSize selectedIconSize() const;
     bool trackMatchesFolderFilter(const MusicTrack &track, const QString &folderPath) const;
-    QIcon iconForTrack(const MusicTrack &track) const;
+    QIcon iconForTrack(const MusicTrack &track);
     QSize selectedIconExtent() const;
+    QString artworkKey(const MusicTrack &track) const;
     void playTrackAt(int index);
     int iconItemToTrackIndex(QListWidgetItem *item) const;
     void showLibraryContextMenu(const QPoint &position, bool iconView);
@@ -203,7 +214,12 @@ private:
 
     QList<MusicTrack> m_allTracks;
     QList<MusicTrack> m_filteredTracks;
+    QList<MusicTrack> m_artworkQueue;
     QList<LyricLine> m_lyrics;
+    QHash<QString, QPixmap> m_artworkCache;
+    QSet<QString> m_artworkRequested;
+    MusicTrack m_artworkCurrentTrack;
+    QString m_artworkCurrentKey;
     qint64 m_currentDurationMs = 0;
     int m_activeLyricIndex = -1;
     bool m_seeking = false;
@@ -260,6 +276,10 @@ private:
     QComboBox *m_languageCombo = nullptr;
     QComboBox *m_videoScaleCombo = nullptr;
     QTimer *m_rightHoldTimer = nullptr;
+    QTimer *m_artworkTimeoutTimer = nullptr;
+    QMediaPlayer *m_artworkPlayer = nullptr;
+    QAudioOutput *m_artworkAudioOutput = nullptr;
+    QVideoSink *m_artworkVideoSink = nullptr;
     QGroupBox *m_playerBox = nullptr;
     QGroupBox *m_settingsBox = nullptr;
     QFrame *m_videoControlsFrame = nullptr;
