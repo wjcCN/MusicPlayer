@@ -211,6 +211,7 @@ void MainWindow::buildUi()
     m_libraryTable->setShowGrid(false);
     m_libraryTable->verticalHeader()->setDefaultSectionSize(44);
     m_libraryTable->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_libraryTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
 
     m_libraryIconList = new QListWidget(this);
     m_libraryIconList->setObjectName("libraryIconList");
@@ -222,9 +223,11 @@ void MainWindow::buildUi()
     m_libraryIconList->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_libraryIconList->setContextMenuPolicy(Qt::CustomContextMenu);
     m_libraryIconList->setWordWrap(true);
+    m_libraryIconList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
 
     m_libraryViewStack = new QStackedWidget(this);
     m_libraryViewStack->setObjectName("libraryViewStack");
+    m_libraryViewStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     m_libraryViewStack->addWidget(m_libraryTable);
     m_libraryViewStack->addWidget(m_libraryIconList);
 
@@ -268,7 +271,7 @@ void MainWindow::buildUi()
     m_mediaStack = new QStackedWidget(this);
     m_mediaStack->setObjectName("mediaStack");
     m_mediaStack->setMinimumSize(240, 180);
-    m_mediaStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_mediaStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     m_mediaStack->addWidget(m_coverLabel);
     m_mediaStack->addWidget(m_videoWidget);
 
@@ -311,6 +314,7 @@ void MainWindow::buildUi()
     m_lyricsList->setObjectName("lyricsList");
     m_lyricsList->setSelectionMode(QAbstractItemView::NoSelection);
     m_lyricsList->setFocusPolicy(Qt::NoFocus);
+    m_lyricsList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
 
     m_nowPlayingPanel = new QFrame(this);
     m_nowPlayingPanel->setObjectName("panel");
@@ -801,6 +805,11 @@ void MainWindow::applyTheme()
     }
     m_activeLyricIndex = -1;
     updateActiveLyric(m_positionSlider ? m_positionSlider->value() : 0);
+    updateResponsiveLayout();
+    if (layout()) {
+        layout()->invalidate();
+        layout()->activate();
+    }
 }
 
 QString MainWindow::themeStyleSheet() const
