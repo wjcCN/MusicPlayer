@@ -227,6 +227,7 @@ private:
     bool m_audioOnlyVideo = false;
     bool m_rightKeyPressed = false;
     bool m_rightLongPressActive = false;
+    bool m_artworkAcceptFrames = false;
     Language m_language = Language::Chinese;
     Theme m_theme = Theme::Dark;
 

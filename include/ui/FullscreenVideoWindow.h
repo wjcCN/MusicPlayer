@@ -7,6 +7,7 @@
 class QLabel;
 class QCloseEvent;
 class QEvent;
+class QFrame;
 class QKeyEvent;
 class QPushButton;
 class QSlider;
@@ -44,6 +45,7 @@ private:
     QString pauseText() const;
 
     PlaybackController *m_player = nullptr;
+    QFrame *m_videoFrame = nullptr;
     QVideoWidget *m_videoWidget = nullptr;
     VideoStateOverlay *m_videoStateOverlay = nullptr;
     QSlider *m_positionSlider = nullptr;

@@ -1014,7 +1014,7 @@ void MainWindow::setupArtworkExtractor()
     });
 
     connect(m_artworkVideoSink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
-        if (m_artworkCurrentKey.isEmpty() || !m_artworkCurrentTrack.isVideo || !frame.isValid()) {
+        if (m_artworkCurrentKey.isEmpty() || !m_artworkCurrentTrack.isVideo || !m_artworkAcceptFrames || !frame.isValid()) {
             return;
         }
 
@@ -1028,7 +1028,8 @@ void MainWindow::setupArtworkExtractor()
         if (m_artworkCurrentKey.isEmpty()) {
             return;
         }
-        if (status == QMediaPlayer::LoadedMedia && m_artworkCurrentTrack.isVideo) {
+        if ((status == QMediaPlayer::LoadedMedia || status == QMediaPlayer::BufferedMedia) && m_artworkCurrentTrack.isVideo) {
+            m_artworkAcceptFrames = true;
             m_artworkPlayer->setPosition(0);
             m_artworkPlayer->play();
         } else if (status == QMediaPlayer::InvalidMedia || status == QMediaPlayer::EndOfMedia) {
@@ -1080,6 +1081,7 @@ void MainWindow::startNextArtworkRequest()
 
     m_artworkCurrentTrack = m_artworkQueue.takeFirst();
     m_artworkCurrentKey = artworkKey(m_artworkCurrentTrack);
+    m_artworkAcceptFrames = false;
     const QFileInfo fileInfo(m_artworkCurrentTrack.filePath);
     if (m_artworkCurrentKey.isEmpty() || !fileInfo.exists()) {
         m_artworkCurrentTrack = {};
@@ -1089,8 +1091,11 @@ void MainWindow::startNextArtworkRequest()
     }
 
     m_artworkPlayer->stop();
+    if (m_artworkVideoSink) {
+        m_artworkVideoSink->setVideoFrame({});
+    }
     m_artworkPlayer->setSource(QUrl::fromLocalFile(fileInfo.absoluteFilePath()));
-    if (m_artworkCurrentTrack.isVideo) {
+    if (!m_artworkCurrentTrack.isVideo) {
         m_artworkPlayer->play();
     }
     m_artworkTimeoutTimer->start(m_artworkCurrentTrack.isVideo ? 4000 : 2500);
@@ -1109,6 +1114,7 @@ void MainWindow::finishArtworkRequest(const QPixmap &pixmap)
 
     m_artworkCurrentTrack = {};
     m_artworkCurrentKey.clear();
+    m_artworkAcceptFrames = false;
 
     if (m_artworkTimeoutTimer) {
         m_artworkTimeoutTimer->stop();

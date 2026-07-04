@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QEvent>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -25,11 +26,19 @@ FullscreenVideoWindow::FullscreenVideoWindow(PlaybackController *player, bool en
     setWindowState(Qt::WindowFullScreen);
     setFocusPolicy(Qt::StrongFocus);
 
-    m_videoWidget = new QVideoWidget(this);
+    m_videoFrame = new QFrame(this);
+    m_videoFrame->setObjectName("fullscreenVideoFrame");
+
+    m_videoWidget = new QVideoWidget(m_videoFrame);
     m_videoWidget->setObjectName("fullscreenVideoSurface");
     m_videoWidget->setFocusPolicy(Qt::StrongFocus);
     m_videoWidget->installEventFilter(this);
     m_videoStateOverlay = new VideoStateOverlay(m_videoWidget);
+
+    auto *videoFrameLayout = new QVBoxLayout(m_videoFrame);
+    videoFrameLayout->setContentsMargins(6, 6, 6, 6);
+    videoFrameLayout->setSpacing(0);
+    videoFrameLayout->addWidget(m_videoWidget);
 
     m_positionSlider = new QSlider(Qt::Horizontal, this);
     m_positionSlider->setObjectName("fullscreenPositionSlider");
@@ -57,9 +66,9 @@ FullscreenVideoWindow::FullscreenVideoWindow(PlaybackController *player, bool en
     controlFrame->setLayout(controlLayout);
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setContentsMargins(12, 12, 12, 0);
     layout->setSpacing(0);
-    layout->addWidget(m_videoWidget, 1);
+    layout->addWidget(m_videoFrame, 1);
     layout->addWidget(controlFrame);
     setLayout(layout);
 

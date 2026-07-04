@@ -263,11 +263,26 @@ QSlider::handle:horizontal {
 
 QWidget#fullscreenControlBar {
     background-color: rgba(8, 13, 20, 215);
-    border-top: 1px solid @borderStrong;
+    border: 1px solid @borderStrong;
+    border-top: none;
+    border-bottom-left-radius: 18px;
+    border-bottom-right-radius: 18px;
+}
+
+QFrame#fullscreenVideoFrame {
+    background-color: @panelDeep;
+    border: 2px solid @borderStrong;
+    border-radius: 22px;
+}
+
+QFrame#fullscreenVideoFrame:hover {
+    border: 2px solid @accent;
 }
 
 QVideoWidget#fullscreenVideoSurface {
     background-color: #000000;
+    border: none;
+    border-radius: 16px;
 }
 
 QLabel#fullscreenTimeLabel {
