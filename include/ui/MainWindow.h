@@ -61,6 +61,7 @@ private:
         AddFolder,
         ShowFolders,
         Rescan,
+        AllFolders,
         SearchPlaceholder,
         LocalMusic,
         Settings,
@@ -128,6 +129,7 @@ private:
     void applyTheme();
     void setTheme(Theme theme);
     QString themeStyleSheet() const;
+    void refreshFolderFilter(const QString &preferredPath = QString());
     void refreshLibraryTable();
     void setStatus(const QString &message);
     void applyPlaybackState(QMediaPlayer::PlaybackState state);
@@ -149,6 +151,8 @@ private:
     void setCoverFromImage(const QImage &image);
     void setCoverFromPixmap(const QPixmap &pixmap);
     void updateResponsiveLayout();
+    QString selectedFolderFilter() const;
+    bool trackMatchesFolderFilter(const MusicTrack &track, const QString &folderPath) const;
     QPixmap coverFromSidecarFile(const MusicTrack &track) const;
     QPixmap defaultCoverPixmap() const;
     QString text(TextKey key) const;
@@ -213,6 +217,7 @@ private:
     QPushButton *m_audioOnlyButton = nullptr;
     QPushButton *m_fullscreenButton = nullptr;
     QComboBox *m_modeCombo = nullptr;
+    QComboBox *m_folderFilterCombo = nullptr;
     QComboBox *m_languageCombo = nullptr;
     QComboBox *m_videoScaleCombo = nullptr;
     QTimer *m_rightHoldTimer = nullptr;

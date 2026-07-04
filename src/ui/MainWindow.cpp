@@ -148,6 +148,9 @@ void MainWindow::buildUi()
     m_foldersButton->setObjectName("ghostButton");
     m_rescanButton = new QPushButton(this);
     m_rescanButton->setObjectName("ghostButton");
+    m_folderFilterCombo = new QComboBox(this);
+    m_folderFilterCombo->setObjectName("folderFilterCombo");
+    m_folderFilterCombo->setMinimumWidth(190);
     m_searchEdit = new QLineEdit(this);
     m_searchEdit->setObjectName("searchEdit");
     m_searchEdit->setClearButtonEnabled(true);
@@ -157,6 +160,7 @@ void MainWindow::buildUi()
     toolbarLayout->addWidget(m_addFolderButton);
     toolbarLayout->addWidget(m_foldersButton);
     toolbarLayout->addWidget(m_rescanButton);
+    toolbarLayout->addWidget(m_folderFilterCombo);
     toolbarLayout->addWidget(m_searchEdit, 1);
 
     m_libraryTitleLabel = new QLabel(this);
@@ -381,6 +385,7 @@ void MainWindow::connectSignals()
         }
 
         const int changed = m_library.addFolder(folder);
+        refreshFolderFilter(selectedFolderFilter());
         refreshLibraryTable();
         if (m_player.queue().isEmpty() && !m_allTracks.isEmpty()) {
             m_player.setQueue(m_allTracks);
@@ -392,6 +397,7 @@ void MainWindow::connectSignals()
 
     connect(m_rescanButton, &QPushButton::clicked, this, [this] {
         const int changed = m_library.rescanFolders();
+        refreshFolderFilter(selectedFolderFilter());
         refreshLibraryTable();
         if (m_player.queue().isEmpty() && !m_allTracks.isEmpty()) {
             m_player.setQueue(m_allTracks);
@@ -400,6 +406,13 @@ void MainWindow::connectSignals()
     });
 
     connect(m_searchEdit, &QLineEdit::textChanged, this, [this] {
+        refreshLibraryTable();
+    });
+
+    connect(m_folderFilterCombo, &QComboBox::currentIndexChanged, this, [this] {
+        if (m_libraryReady) {
+            m_library.setSetting("folder_filter", selectedFolderFilter());
+        }
         refreshLibraryTable();
     });
 
@@ -542,6 +555,7 @@ void MainWindow::loadInitialState()
     m_audioOnlyButton->setChecked(m_audioOnlyVideo);
     applyVideoScale();
 
+    refreshFolderFilter(m_library.setting("folder_filter"));
     refreshLibraryTable();
 
     const QList<MusicTrack> savedQueue = m_library.loadQueue();
@@ -560,6 +574,7 @@ void MainWindow::applyLanguage()
     m_addFolderButton->setText(text(TextKey::AddFolder));
     m_foldersButton->setText(text(TextKey::ShowFolders));
     m_rescanButton->setText(text(TextKey::Rescan));
+    refreshFolderFilter(selectedFolderFilter());
     m_searchEdit->setPlaceholderText(text(TextKey::SearchPlaceholder));
     m_libraryTitleLabel->setText(text(TextKey::LocalMusic));
     m_settingsBox->setTitle(text(TextKey::Settings));
@@ -721,6 +736,31 @@ QString MainWindow::themeStyleSheet() const
     return style;
 }
 
+void MainWindow::refreshFolderFilter(const QString &preferredPath)
+{
+    if (!m_folderFilterCombo) {
+        return;
+    }
+
+    const QString currentPath = preferredPath.isNull() ? selectedFolderFilter() : preferredPath;
+    const QStringList folders = m_libraryReady ? m_library.folders() : QStringList();
+
+    QSignalBlocker blocker(m_folderFilterCombo);
+    m_folderFilterCombo->clear();
+    m_folderFilterCombo->addItem(text(TextKey::AllFolders), QString());
+
+    int selectedIndex = 0;
+    for (const QString &folder : folders) {
+        const int row = m_folderFilterCombo->count();
+        m_folderFilterCombo->addItem(QDir::toNativeSeparators(folder), folder);
+        if (!currentPath.isEmpty() && folder.compare(currentPath, Qt::CaseInsensitive) == 0) {
+            selectedIndex = row;
+        }
+    }
+
+    m_folderFilterCombo->setCurrentIndex(selectedIndex);
+}
+
 void MainWindow::setTheme(Theme theme)
 {
     if (m_theme == theme) {
@@ -740,9 +780,14 @@ void MainWindow::refreshLibraryTable()
 {
     m_allTracks = m_library.tracks();
     const QString filter = m_searchEdit->text().trimmed();
+    const QString folderFilter = selectedFolderFilter();
     m_filteredTracks.clear();
 
     for (const MusicTrack &track : m_allTracks) {
+        if (!trackMatchesFolderFilter(track, folderFilter)) {
+            continue;
+        }
+
         const QString mediaType = track.isVideo ? text(TextKey::Video) : text(TextKey::Audio);
         const QString haystack = QString("%1 %2 %3 %4 %5").arg(track.title, track.artist, track.album, track.filePath, mediaType);
         if (filter.isEmpty() || haystack.contains(filter, Qt::CaseInsensitive)) {
@@ -824,6 +869,7 @@ void MainWindow::savePlaybackState()
     m_library.setSetting("playback_mode", QString::number(static_cast<int>(m_player.playbackMode())));
     m_library.setSetting("language", languageCode());
     m_library.setSetting("theme", themeCode());
+    m_library.setSetting("folder_filter", selectedFolderFilter());
     m_library.setSetting("video_scale", QString::number(m_videoScaleCombo->currentData().toInt()));
     m_library.setSetting("video_audio_only", m_audioOnlyVideo ? "1" : "0");
 }
@@ -837,6 +883,7 @@ void MainWindow::showFoldersDialog()
 
     FolderManagerDialog dialog(&m_library, m_language == Language::English, this);
     connect(&dialog, &FolderManagerDialog::foldersChanged, this, [this] {
+        refreshFolderFilter(selectedFolderFilter());
         refreshLibraryTable();
         if (m_player.queue().isEmpty() && !m_allTracks.isEmpty()) {
             m_player.setQueue(m_allTracks);
@@ -1141,6 +1188,33 @@ void MainWindow::updateResponsiveLayout()
     }
 }
 
+QString MainWindow::selectedFolderFilter() const
+{
+    if (!m_folderFilterCombo) {
+        return {};
+    }
+
+    return m_folderFilterCombo->currentData().toString();
+}
+
+bool MainWindow::trackMatchesFolderFilter(const MusicTrack &track, const QString &folderPath) const
+{
+    if (folderPath.isEmpty()) {
+        return true;
+    }
+
+    QString normalizedFolder = QDir::toNativeSeparators(QFileInfo(folderPath).absoluteFilePath());
+    QString normalizedTrackPath = QDir::toNativeSeparators(QFileInfo(track.filePath).absoluteFilePath());
+
+    if (normalizedFolder.endsWith(QDir::separator()) && !QDir(normalizedFolder).isRoot()) {
+        normalizedFolder.chop(1);
+    }
+
+    const QString childPrefix = normalizedFolder + QDir::separator();
+    return normalizedTrackPath.compare(normalizedFolder, Qt::CaseInsensitive) == 0
+        || normalizedTrackPath.startsWith(childPrefix, Qt::CaseInsensitive);
+}
+
 QPixmap MainWindow::coverFromSidecarFile(const MusicTrack &track) const
 {
     const QFileInfo info(track.filePath);
@@ -1190,6 +1264,8 @@ QString MainWindow::text(TextKey key) const
         return english ? QStringLiteral("Folders") : QStringLiteral("已添加文件夹");
     case TextKey::Rescan:
         return english ? QStringLiteral("Rescan") : QStringLiteral("重新扫描");
+    case TextKey::AllFolders:
+        return english ? QStringLiteral("All folders") : QStringLiteral("全部文件夹");
     case TextKey::SearchPlaceholder:
         return english ? QStringLiteral("Search local title, artist, album, type, or path")
                        : QStringLiteral("搜索本地标题、歌手、专辑、类型或路径");
