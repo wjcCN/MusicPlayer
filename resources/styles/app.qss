@@ -167,6 +167,8 @@ QComboBox::drop-down {
 }
 
 QTableWidget#libraryTable,
+QStackedWidget#libraryViewStack,
+QListWidget#libraryIconList,
 QListWidget#lyricsList,
 QListWidget#folderList {
     background-color: @panelAlt;
@@ -179,6 +181,11 @@ QListWidget#folderList {
 
 QTableWidget#libraryTable {
     outline: 0;
+}
+
+QListWidget#libraryIconList {
+    outline: 0;
+    padding: 12px;
 }
 
 QHeaderView::section {
@@ -205,6 +212,23 @@ QTableWidget#libraryTable::item:selected {
 QListWidget::item {
     padding: 8px 6px;
     border: none;
+}
+
+QListWidget#libraryIconList::item {
+    border-radius: 18px;
+    padding: 10px;
+    margin: 6px;
+}
+
+QListWidget#libraryIconList::item:hover {
+    background-color: @ghostBg;
+    color: @heading;
+}
+
+QListWidget#libraryIconList::item:selected {
+    background-color: @selectionBg;
+    color: @heading;
+    border: 1px solid @accent;
 }
 
 QListWidget#lyricsList::item:selected {

@@ -5,6 +5,7 @@
 #include "ui/FullscreenVideoWindow.h"
 #include "ui/VideoStateOverlay.h"
 
+#include <QAction>
 #include <QAbstractItemView>
 #include <QApplication>
 #include <QBoxLayout>
@@ -18,12 +19,16 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QListView>
+#include <QMenu>
 #include <QListWidgetItem>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPainterPath>
+#include <QProcess>
 #include <QShortcut>
 #include <QScrollArea>
 #include <QSignalBlocker>
@@ -151,6 +156,17 @@ void MainWindow::buildUi()
     m_folderFilterCombo = new QComboBox(this);
     m_folderFilterCombo->setObjectName("folderFilterCombo");
     m_folderFilterCombo->setMinimumWidth(190);
+    m_libraryViewCombo = new QComboBox(this);
+    m_libraryViewCombo->setObjectName("libraryViewCombo");
+    m_libraryViewCombo->addItem(QString(), QStringLiteral("list"));
+    m_libraryViewCombo->addItem(QString(), QStringLiteral("icons"));
+    m_libraryViewCombo->setMinimumWidth(96);
+    m_iconSizeCombo = new QComboBox(this);
+    m_iconSizeCombo->setObjectName("iconSizeCombo");
+    m_iconSizeCombo->addItem(QString(), QStringLiteral("medium"));
+    m_iconSizeCombo->addItem(QString(), QStringLiteral("small"));
+    m_iconSizeCombo->addItem(QString(), QStringLiteral("large"));
+    m_iconSizeCombo->setMinimumWidth(96);
     m_searchEdit = new QLineEdit(this);
     m_searchEdit->setObjectName("searchEdit");
     m_searchEdit->setClearButtonEnabled(true);
@@ -161,6 +177,8 @@ void MainWindow::buildUi()
     toolbarLayout->addWidget(m_foldersButton);
     toolbarLayout->addWidget(m_rescanButton);
     toolbarLayout->addWidget(m_folderFilterCombo);
+    toolbarLayout->addWidget(m_libraryViewCombo);
+    toolbarLayout->addWidget(m_iconSizeCombo);
     toolbarLayout->addWidget(m_searchEdit, 1);
 
     m_libraryTitleLabel = new QLabel(this);
@@ -183,6 +201,23 @@ void MainWindow::buildUi()
     m_libraryTable->setColumnWidth(PathColumn, 180);
     m_libraryTable->setShowGrid(false);
     m_libraryTable->verticalHeader()->setDefaultSectionSize(44);
+    m_libraryTable->setContextMenuPolicy(Qt::CustomContextMenu);
+
+    m_libraryIconList = new QListWidget(this);
+    m_libraryIconList->setObjectName("libraryIconList");
+    m_libraryIconList->setViewMode(QListView::IconMode);
+    m_libraryIconList->setResizeMode(QListView::Adjust);
+    m_libraryIconList->setMovement(QListView::Static);
+    m_libraryIconList->setWrapping(true);
+    m_libraryIconList->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_libraryIconList->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_libraryIconList->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_libraryIconList->setWordWrap(true);
+
+    m_libraryViewStack = new QStackedWidget(this);
+    m_libraryViewStack->setObjectName("libraryViewStack");
+    m_libraryViewStack->addWidget(m_libraryTable);
+    m_libraryViewStack->addWidget(m_libraryIconList);
 
     m_libraryPanel = new QFrame(this);
     m_libraryPanel->setObjectName("libraryPanel");
@@ -192,7 +227,7 @@ void MainWindow::buildUi()
     libraryLayout->setSpacing(12);
     libraryLayout->addWidget(m_libraryTitleLabel);
     libraryLayout->addLayout(toolbarLayout);
-    libraryLayout->addWidget(m_libraryTable, 1);
+    libraryLayout->addWidget(m_libraryViewStack, 1);
 
     m_coverLabel = new QLabel(this);
     m_coverLabel->setObjectName("coverArt");
@@ -416,6 +451,21 @@ void MainWindow::connectSignals()
         refreshLibraryTable();
     });
 
+    connect(m_libraryViewCombo, &QComboBox::currentIndexChanged, this, [this] {
+        applyLibraryView();
+        if (m_libraryReady) {
+            m_library.setSetting("library_view", m_libraryViewCombo->currentData().toString());
+        }
+    });
+
+    connect(m_iconSizeCombo, &QComboBox::currentIndexChanged, this, [this] {
+        applyIconSize();
+        refreshLibraryIconView();
+        if (m_libraryReady) {
+            m_library.setSetting("icon_size", m_iconSizeCombo->currentData().toString());
+        }
+    });
+
     connect(m_libraryTable, &QTableWidget::cellDoubleClicked, this, [this](int row, int column) {
         const int index = rowToTrackIndex(row);
         if (index < 0) {
@@ -429,9 +479,19 @@ void MainWindow::connectSignals()
             return;
         }
 
-        m_player.setQueue(m_filteredTracks, index);
-        m_library.saveQueue(m_filteredTracks);
-        m_player.playAt(index);
+        playTrackAt(index);
+    });
+
+    connect(m_libraryTable, &QTableWidget::customContextMenuRequested, this, [this](const QPoint &position) {
+        showLibraryContextMenu(position, false);
+    });
+
+    connect(m_libraryIconList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
+        playTrackAt(iconItemToTrackIndex(item));
+    });
+
+    connect(m_libraryIconList, &QListWidget::customContextMenuRequested, this, [this](const QPoint &position) {
+        showLibraryContextMenu(position, true);
     });
 
     connect(m_themeButton, &QPushButton::clicked, this, [this] {
@@ -555,6 +615,17 @@ void MainWindow::loadInitialState()
     m_audioOnlyButton->setChecked(m_audioOnlyVideo);
     applyVideoScale();
 
+    const int libraryViewIndex = m_libraryViewCombo->findData(m_library.setting("library_view", "list"));
+    if (libraryViewIndex >= 0) {
+        m_libraryViewCombo->setCurrentIndex(libraryViewIndex);
+    }
+    const int iconSizeIndex = m_iconSizeCombo->findData(m_library.setting("icon_size", "medium"));
+    if (iconSizeIndex >= 0) {
+        m_iconSizeCombo->setCurrentIndex(iconSizeIndex);
+    }
+    applyIconSize();
+    applyLibraryView();
+
     refreshFolderFilter(m_library.setting("folder_filter"));
     refreshLibraryTable();
 
@@ -580,7 +651,7 @@ void MainWindow::applyLanguage()
     m_settingsBox->setTitle(text(TextKey::Settings));
     m_languageLabel->setText(text(TextKey::Language));
     m_themeLabel->setText(text(TextKey::Theme));
-    m_themeButton->setText(text(m_theme == Theme::Dark ? TextKey::SwitchToLight : TextKey::SwitchToDark));
+    m_themeButton->setText(text(m_theme == Theme::Dark ? TextKey::SwitchToDark : TextKey::SwitchToLight));
     m_playerBox->setTitle(text(TextKey::Playback));
     m_modeLabel->setText(text(TextKey::Mode));
     m_volumeLabel->setText(text(TextKey::Volume));
@@ -639,6 +710,29 @@ void MainWindow::applyLanguage()
         }
     }
 
+    {
+        const QSignalBlocker blocker(m_libraryViewCombo);
+        const QString currentData = m_libraryViewCombo->currentData().toString();
+        m_libraryViewCombo->setItemText(0, text(TextKey::ListView));
+        m_libraryViewCombo->setItemText(1, text(TextKey::IconView));
+        const int viewIndex = m_libraryViewCombo->findData(currentData);
+        if (viewIndex >= 0) {
+            m_libraryViewCombo->setCurrentIndex(viewIndex);
+        }
+    }
+
+    {
+        const QSignalBlocker blocker(m_iconSizeCombo);
+        const QString currentData = m_iconSizeCombo->currentData().toString();
+        m_iconSizeCombo->setItemText(0, text(TextKey::MediumIcons));
+        m_iconSizeCombo->setItemText(1, text(TextKey::SmallIcons));
+        m_iconSizeCombo->setItemText(2, text(TextKey::LargeIcons));
+        const int sizeIndex = m_iconSizeCombo->findData(currentData);
+        if (sizeIndex >= 0) {
+            m_iconSizeCombo->setCurrentIndex(sizeIndex);
+        }
+    }
+
     const MusicTrack currentTrack = m_player.currentTrack();
     if (currentTrack.filePath.isEmpty()) {
         m_nowPlayingLabel->setText(text(TextKey::NoTrackSelected));
@@ -692,7 +786,7 @@ void MainWindow::applyTheme()
     }
 
     if (m_themeButton) {
-        m_themeButton->setText(text(m_theme == Theme::Dark ? TextKey::SwitchToLight : TextKey::SwitchToDark));
+        m_themeButton->setText(text(m_theme == Theme::Dark ? TextKey::SwitchToDark : TextKey::SwitchToLight));
     }
     m_activeLyricIndex = -1;
     updateActiveLyric(m_positionSlider ? m_positionSlider->value() : 0);
@@ -824,6 +918,61 @@ void MainWindow::refreshLibraryTable()
     }
 
     setStatus(text(TextKey::LocalTracks).arg(m_filteredTracks.size()));
+    refreshLibraryIconView();
+}
+
+void MainWindow::refreshLibraryIconView()
+{
+    if (!m_libraryIconList) {
+        return;
+    }
+
+    m_libraryIconList->clear();
+    const QSize iconSize = selectedIconExtent();
+    m_libraryIconList->setIconSize(iconSize);
+    m_libraryIconList->setGridSize(QSize(iconSize.width() + 58, iconSize.height() + 88));
+
+    for (int index = 0; index < m_filteredTracks.size(); ++index) {
+        const MusicTrack &track = m_filteredTracks.at(index);
+        const QString artist = track.artist.isEmpty() ? text(TextKey::Unknown) : track.artist;
+        const QString label = QStringLiteral("%1\n%2\n%3")
+                                  .arg(track.displayTitle(), artist, formatDuration(track.durationMs));
+
+        auto *item = new QListWidgetItem(iconForTrack(track), label);
+        item->setTextAlignment(Qt::AlignHCenter);
+        item->setData(Qt::UserRole, index);
+        item->setToolTip(QDir::toNativeSeparators(track.filePath));
+        item->setSizeHint(QSize(iconSize.width() + 50, iconSize.height() + 78));
+        if (!QFileInfo::exists(track.filePath)) {
+            item->setForeground(QColor(m_theme == Theme::Dark ? "#7f8da3" : "#9aa4b2"));
+        }
+        m_libraryIconList->addItem(item);
+    }
+}
+
+void MainWindow::applyLibraryView()
+{
+    if (!m_libraryViewStack) {
+        return;
+    }
+
+    const bool iconView = selectedLibraryView() == LibraryView::Icons;
+    m_libraryViewStack->setCurrentWidget(iconView ? static_cast<QWidget *>(m_libraryIconList)
+                                                  : static_cast<QWidget *>(m_libraryTable));
+    if (m_iconSizeCombo) {
+        m_iconSizeCombo->setEnabled(iconView);
+    }
+}
+
+void MainWindow::applyIconSize()
+{
+    if (!m_libraryIconList) {
+        return;
+    }
+
+    const QSize iconSize = selectedIconExtent();
+    m_libraryIconList->setIconSize(iconSize);
+    m_libraryIconList->setGridSize(QSize(iconSize.width() + 58, iconSize.height() + 88));
 }
 
 void MainWindow::setStatus(const QString &message)
@@ -870,6 +1019,8 @@ void MainWindow::savePlaybackState()
     m_library.setSetting("language", languageCode());
     m_library.setSetting("theme", themeCode());
     m_library.setSetting("folder_filter", selectedFolderFilter());
+    m_library.setSetting("library_view", m_libraryViewCombo->currentData().toString());
+    m_library.setSetting("icon_size", m_iconSizeCombo->currentData().toString());
     m_library.setSetting("video_scale", QString::number(m_videoScaleCombo->currentData().toInt()));
     m_library.setSetting("video_audio_only", m_audioOnlyVideo ? "1" : "0");
 }
@@ -1197,6 +1348,32 @@ QString MainWindow::selectedFolderFilter() const
     return m_folderFilterCombo->currentData().toString();
 }
 
+MainWindow::LibraryView MainWindow::selectedLibraryView() const
+{
+    if (!m_libraryViewCombo) {
+        return LibraryView::List;
+    }
+
+    return m_libraryViewCombo->currentData().toString() == QStringLiteral("icons") ? LibraryView::Icons : LibraryView::List;
+}
+
+MainWindow::IconSize MainWindow::selectedIconSize() const
+{
+    if (!m_iconSizeCombo) {
+        return IconSize::Medium;
+    }
+
+    const QString value = m_iconSizeCombo->currentData().toString();
+    if (value == QStringLiteral("small")) {
+        return IconSize::Small;
+    }
+    if (value == QStringLiteral("large")) {
+        return IconSize::Large;
+    }
+
+    return IconSize::Medium;
+}
+
 bool MainWindow::trackMatchesFolderFilter(const MusicTrack &track, const QString &folderPath) const
 {
     if (folderPath.isEmpty()) {
@@ -1213,6 +1390,125 @@ bool MainWindow::trackMatchesFolderFilter(const MusicTrack &track, const QString
     const QString childPrefix = normalizedFolder + QDir::separator();
     return normalizedTrackPath.compare(normalizedFolder, Qt::CaseInsensitive) == 0
         || normalizedTrackPath.startsWith(childPrefix, Qt::CaseInsensitive);
+}
+
+QIcon MainWindow::iconForTrack(const MusicTrack &track) const
+{
+    QPixmap pixmap = coverFromSidecarFile(track);
+    if (pixmap.isNull()) {
+        pixmap = defaultCoverPixmap();
+    }
+
+    const QSize targetSize = selectedIconExtent();
+    QPixmap scaled = pixmap.scaled(targetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    const QRect cropRect((scaled.width() - targetSize.width()) / 2,
+                         (scaled.height() - targetSize.height()) / 2,
+                         targetSize.width(),
+                         targetSize.height());
+    scaled = scaled.copy(cropRect);
+
+    QPixmap rounded(targetSize);
+    rounded.fill(Qt::transparent);
+
+    QPainter painter(&rounded);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPainterPath path;
+    path.addRoundedRect(QRectF(QPointF(0, 0), QSizeF(targetSize)), 16, 16);
+    painter.setClipPath(path);
+    painter.drawPixmap(0, 0, scaled);
+
+    if (track.isVideo) {
+        painter.setClipping(false);
+        painter.setBrush(QColor(0, 0, 0, 150));
+        painter.setPen(Qt::NoPen);
+        const int badgeSize = qMax(24, targetSize.width() / 3);
+        const QRect badgeRect(targetSize.width() - badgeSize - 8, targetSize.height() - badgeSize - 8, badgeSize, badgeSize);
+        painter.drawEllipse(badgeRect);
+        QPainterPath playPath;
+        const QPointF center = badgeRect.center();
+        const qreal side = badgeSize * 0.34;
+        playPath.moveTo(center.x() - side * 0.45, center.y() - side);
+        playPath.lineTo(center.x() - side * 0.45, center.y() + side);
+        playPath.lineTo(center.x() + side * 0.9, center.y());
+        playPath.closeSubpath();
+        painter.setBrush(QColor("#ffffff"));
+        painter.drawPath(playPath);
+    }
+
+    return QIcon(rounded);
+}
+
+QSize MainWindow::selectedIconExtent() const
+{
+    switch (selectedIconSize()) {
+    case IconSize::Small:
+        return QSize(72, 72);
+    case IconSize::Large:
+        return QSize(148, 148);
+    case IconSize::Medium:
+        return QSize(108, 108);
+    }
+
+    return QSize(108, 108);
+}
+
+void MainWindow::playTrackAt(int index)
+{
+    if (index < 0 || index >= m_filteredTracks.size()) {
+        return;
+    }
+
+    m_player.setQueue(m_filteredTracks, index);
+    m_library.saveQueue(m_filteredTracks);
+    m_player.playAt(index);
+}
+
+int MainWindow::iconItemToTrackIndex(QListWidgetItem *item) const
+{
+    if (!item) {
+        return -1;
+    }
+
+    const int index = item->data(Qt::UserRole).toInt();
+    return index >= 0 && index < m_filteredTracks.size() ? index : -1;
+}
+
+void MainWindow::showLibraryContextMenu(const QPoint &position, bool iconView)
+{
+    const int index = iconView
+                          ? iconItemToTrackIndex(m_libraryIconList->itemAt(position))
+                          : rowToTrackIndex(m_libraryTable->rowAt(position.y()));
+    if (index < 0) {
+        return;
+    }
+
+    QMenu menu(this);
+    QAction *openAction = menu.addAction(text(TextKey::OpenInFolder));
+    QWidget *sourceWidget = iconView ? static_cast<QWidget *>(m_libraryIconList) : static_cast<QWidget *>(m_libraryTable);
+    QAction *selectedAction = menu.exec(sourceWidget->mapToGlobal(position));
+    if (selectedAction == openAction) {
+        openTrackInFolder(index);
+    }
+}
+
+void MainWindow::openTrackInFolder(int index) const
+{
+    if (index < 0 || index >= m_filteredTracks.size()) {
+        return;
+    }
+
+    const QFileInfo fileInfo(m_filteredTracks.at(index).filePath);
+    const QString nativeFilePath = QDir::toNativeSeparators(fileInfo.absoluteFilePath());
+    const QString nativeFolderPath = QDir::toNativeSeparators(fileInfo.absolutePath());
+
+    if (fileInfo.exists()) {
+        QProcess::startDetached(QStringLiteral("explorer.exe"), QStringList{QStringLiteral("/select,") + nativeFilePath});
+        return;
+    }
+
+    if (QDir(fileInfo.absolutePath()).exists()) {
+        QProcess::startDetached(QStringLiteral("explorer.exe"), QStringList{nativeFolderPath});
+    }
 }
 
 QPixmap MainWindow::coverFromSidecarFile(const MusicTrack &track) const
@@ -1281,6 +1577,22 @@ QString MainWindow::text(TextKey key) const
         return english ? QStringLiteral("Light") : QStringLiteral("浅色");
     case TextKey::SwitchToDark:
         return english ? QStringLiteral("Dark") : QStringLiteral("深色");
+    case TextKey::ViewMode:
+        return english ? QStringLiteral("View") : QStringLiteral("视图");
+    case TextKey::ListView:
+        return english ? QStringLiteral("List") : QStringLiteral("列表");
+    case TextKey::IconView:
+        return english ? QStringLiteral("Icons") : QStringLiteral("图标");
+    case TextKey::IconSizeLabel:
+        return english ? QStringLiteral("Icon Size") : QStringLiteral("图标大小");
+    case TextKey::SmallIcons:
+        return english ? QStringLiteral("Small") : QStringLiteral("小图标");
+    case TextKey::MediumIcons:
+        return english ? QStringLiteral("Medium") : QStringLiteral("中图标");
+    case TextKey::LargeIcons:
+        return english ? QStringLiteral("Large") : QStringLiteral("大图标");
+    case TextKey::OpenInFolder:
+        return english ? QStringLiteral("Open in local folder") : QStringLiteral("在本地文件夹打开");
     case TextKey::Playback:
         return english ? QStringLiteral("Playback") : QStringLiteral("播放控制");
     case TextKey::Lyrics:

@@ -5,12 +5,15 @@
 #include "data/MusicLibrary.h"
 
 #include <QComboBox>
+#include <QIcon>
 #include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPoint>
 #include <QPushButton>
 #include <QPixmap>
+#include <QSize>
 #include <QSlider>
 #include <QTableWidget>
 #include <QWidget>
@@ -54,6 +57,19 @@ private:
         Light
     };
 
+    enum class LibraryView
+    {
+        List,
+        Icons
+    };
+
+    enum class IconSize
+    {
+        Small,
+        Medium,
+        Large
+    };
+
     enum class TextKey
     {
         WindowTitle,
@@ -69,6 +85,14 @@ private:
         Theme,
         SwitchToLight,
         SwitchToDark,
+        ViewMode,
+        ListView,
+        IconView,
+        IconSizeLabel,
+        SmallIcons,
+        MediumIcons,
+        LargeIcons,
+        OpenInFolder,
         Playback,
         Lyrics,
         NoTrackSelected,
@@ -131,6 +155,9 @@ private:
     QString themeStyleSheet() const;
     void refreshFolderFilter(const QString &preferredPath = QString());
     void refreshLibraryTable();
+    void refreshLibraryIconView();
+    void applyLibraryView();
+    void applyIconSize();
     void setStatus(const QString &message);
     void applyPlaybackState(QMediaPlayer::PlaybackState state);
     void updatePositionLabel(qint64 positionMs, qint64 durationMs);
@@ -152,7 +179,15 @@ private:
     void setCoverFromPixmap(const QPixmap &pixmap);
     void updateResponsiveLayout();
     QString selectedFolderFilter() const;
+    LibraryView selectedLibraryView() const;
+    IconSize selectedIconSize() const;
     bool trackMatchesFolderFilter(const MusicTrack &track, const QString &folderPath) const;
+    QIcon iconForTrack(const MusicTrack &track) const;
+    QSize selectedIconExtent() const;
+    void playTrackAt(int index);
+    int iconItemToTrackIndex(QListWidgetItem *item) const;
+    void showLibraryContextMenu(const QPoint &position, bool iconView);
+    void openTrackInFolder(int index) const;
     QPixmap coverFromSidecarFile(const MusicTrack &track) const;
     QPixmap defaultCoverPixmap() const;
     QString text(TextKey key) const;
@@ -197,6 +232,8 @@ private:
     QLabel *m_videoScaleLabel = nullptr;
     QListWidget *m_lyricsList = nullptr;
     QTableWidget *m_libraryTable = nullptr;
+    QListWidget *m_libraryIconList = nullptr;
+    QStackedWidget *m_libraryViewStack = nullptr;
     QStackedWidget *m_mediaStack = nullptr;
     QBoxLayout *m_headerLayout = nullptr;
     QBoxLayout *m_contentLayout = nullptr;
@@ -218,6 +255,8 @@ private:
     QPushButton *m_fullscreenButton = nullptr;
     QComboBox *m_modeCombo = nullptr;
     QComboBox *m_folderFilterCombo = nullptr;
+    QComboBox *m_libraryViewCombo = nullptr;
+    QComboBox *m_iconSizeCombo = nullptr;
     QComboBox *m_languageCombo = nullptr;
     QComboBox *m_videoScaleCombo = nullptr;
     QTimer *m_rightHoldTimer = nullptr;
