@@ -9,7 +9,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Core
     Gui
     Multimedia
-    Network
+    MultimediaWidgets
     Sql
     Widgets
 )
@@ -19,19 +19,22 @@ qt_standard_project_setup()
 set(PROJECT_HEADERS
     include/core/MusicTrack.h
     include/core/PlaybackController.h
+    include/core/LyricsParser.h
     include/data/MusicLibrary.h
     include/providers/LocalProvider.h
-    include/providers/MusicProvider.h
-    include/providers/ProviderRegistry.h
+    include/ui/FolderManagerDialog.h
+    include/ui/FullscreenVideoWindow.h
     include/ui/MainWindow.h
 )
 
 set(PROJECT_SOURCES
+    src/core/LyricsParser.cpp
     src/core/PlaybackController.cpp
     src/data/MusicLibrary.cpp
     src/main.cpp
     src/providers/LocalProvider.cpp
-    src/providers/ProviderRegistry.cpp
+    src/ui/FolderManagerDialog.cpp
+    src/ui/FullscreenVideoWindow.cpp
     src/ui/MainWindow.cpp
 )
 
@@ -62,6 +65,10 @@ target_include_directories(${PROJECT_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /utf-8)
+endif()
+
 set_target_properties(${PROJECT_NAME}
     PROPERTIES
         WIN32_EXECUTABLE false
@@ -73,18 +80,18 @@ target_link_libraries(${PROJECT_NAME}
         Qt6::Core
         Qt6::Gui
         Qt6::Multimedia
-        Qt6::Network
+        Qt6::MultimediaWidgets
         Qt6::Sql
         Qt6::Widgets
 )
 
-source_group("Header Files\\Core" FILES include/core/MusicTrack.h include/core/PlaybackController.h)
+source_group("Header Files\\Core" FILES include/core/MusicTrack.h include/core/PlaybackController.h include/core/LyricsParser.h)
 source_group("Header Files\\Data" FILES include/data/MusicLibrary.h)
-source_group("Header Files\\Providers" FILES include/providers/LocalProvider.h include/providers/MusicProvider.h include/providers/ProviderRegistry.h)
-source_group("Header Files\\UI" FILES include/ui/MainWindow.h)
-source_group("Source Files\\Core" FILES src/core/PlaybackController.cpp)
+source_group("Header Files\\Providers" FILES include/providers/LocalProvider.h)
+source_group("Header Files\\UI" FILES include/ui/MainWindow.h include/ui/FolderManagerDialog.h include/ui/FullscreenVideoWindow.h)
+source_group("Source Files\\Core" FILES src/core/PlaybackController.cpp src/core/LyricsParser.cpp)
 source_group("Source Files\\Data" FILES src/data/MusicLibrary.cpp)
-source_group("Source Files\\Providers" FILES src/providers/LocalProvider.cpp src/providers/ProviderRegistry.cpp)
-source_group("Source Files\\UI" FILES src/ui/MainWindow.cpp src/main.cpp)
+source_group("Source Files\\Providers" FILES src/providers/LocalProvider.cpp)
+source_group("Source Files\\UI" FILES src/ui/MainWindow.cpp src/ui/FolderManagerDialog.cpp src/ui/FullscreenVideoWindow.cpp src/main.cpp)
 source_group("Form Files" FILES ${PROJECT_UI_REFERENCES})
 source_group("Resource Files" FILES ${PROJECT_RESOURCES})

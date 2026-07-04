@@ -1,6 +1,7 @@
 #include "core/PlaybackController.h"
 
 #include <QFileInfo>
+#include <QMediaMetaData>
 #include <QRandomGenerator>
 #include <QUrl>
 
@@ -18,6 +19,16 @@ PlaybackController::PlaybackController(QObject *parent)
         emit durationChanged(duration);
         if (m_currentIndex >= 0 && m_currentIndex < m_queue.size() && duration > 0) {
             emit durationLearned(m_queue.at(m_currentIndex), duration);
+        }
+    });
+    connect(&m_player, &QMediaPlayer::metaDataChanged, this, [this] {
+        const QMediaMetaData metaData = m_player.metaData();
+        QImage cover = metaData.value(QMediaMetaData::CoverArtImage).value<QImage>();
+        if (cover.isNull()) {
+            cover = metaData.value(QMediaMetaData::ThumbnailImage).value<QImage>();
+        }
+        if (!cover.isNull()) {
+            emit coverArtChanged(cover);
         }
     });
     connect(&m_player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
@@ -56,6 +67,16 @@ PlaybackMode PlaybackController::playbackMode() const
 QMediaPlayer::PlaybackState PlaybackController::playbackState() const
 {
     return m_player.playbackState();
+}
+
+qint64 PlaybackController::position() const
+{
+    return m_player.position();
+}
+
+qint64 PlaybackController::duration() const
+{
+    return m_player.duration();
 }
 
 void PlaybackController::setQueue(const QList<MusicTrack> &tracks, int startIndex)
@@ -165,6 +186,16 @@ void PlaybackController::setPlaybackMode(PlaybackMode mode)
     emit playbackModeChanged(m_mode);
 }
 
+void PlaybackController::setPlaybackRate(qreal rate)
+{
+    m_player.setPlaybackRate(rate);
+}
+
+void PlaybackController::setVideoOutput(QObject *output)
+{
+    m_player.setVideoOutput(output);
+}
+
 void PlaybackController::playCurrent()
 {
     if (m_currentIndex < 0 || m_currentIndex >= m_queue.size()) {
@@ -180,6 +211,7 @@ void PlaybackController::playCurrent()
 
     emit currentTrackChanged(track);
     m_player.setSource(QUrl::fromLocalFile(fileInfo.absoluteFilePath()));
+    m_player.setPlaybackRate(1.0);
     m_player.play();
 }
 

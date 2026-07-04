@@ -23,6 +23,7 @@ public:
     QList<MusicTrack> tracks() const;
     QStringList folders() const;
     int addFolder(const QString &folderPath);
+    bool removeFolder(const QString &folderPath);
     int rescanFolders();
     bool setTrackDuration(const QString &filePath, qint64 durationMs);
     bool setFavorite(const QString &filePath, bool favorite);

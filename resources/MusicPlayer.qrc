@@ -1,5 +1,17 @@
 <RCC>
     <qresource prefix="/styles">
-        <file>styles/app.qss</file>
+        <file alias="app.qss">styles/app.qss</file>
+    </qresource>
+    <qresource prefix="/images">
+        <file alias="default-cover.png">images/default-cover.png</file>
+        <file alias="button-surface.png">images/button-surface.png</file>
+        <file alias="button-replacement.png">images/button-replacement.png</file>
+        <file alias="main-background.png">images/main-background.png</file>
+        <file alias="dialog-background.png">images/dialog-background.png</file>
+        <file alias="sidebar-panel.png">images/sidebar-panel.png</file>
+        <file alias="light-button-round.png">images/light-button-round.png</file>
+        <file alias="light-main-background.png">images/light-main-background.png</file>
+        <file alias="light-dialog-background.png">images/light-dialog-background.png</file>
+        <file alias="light-sidebar-panel.png">images/light-sidebar-panel.png</file>
     </qresource>
 </RCC>

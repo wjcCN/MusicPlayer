@@ -1,31 +1,232 @@
 QWidget {
+    color: @text;
     font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
     font-size: 13px;
 }
 
+QWidget#appRoot,
+QDialog#folderManagerDialog {
+    background-color: @windowBg;
+}
+
+QWidget#appRoot {
+    border-image: url(@mainBackground) 0 0 0 0 stretch stretch;
+}
+
+QDialog#folderManagerDialog {
+    border-image: url(@dialogBackground) 0 0 0 0 stretch stretch;
+}
+
+QDialog#fullscreenVideoWindow {
+    background-color: #000000;
+}
+
+QLabel#appTitle {
+    color: @heading;
+    font-size: 30px;
+    font-weight: 750;
+}
+
+QLabel#appSubtitle,
+QLabel#trackArtist,
+QLabel#statusLabel,
+QLabel#timeLabel {
+    color: @muted;
+}
+
 QLabel#sectionTitle {
+    color: @heading;
     font-size: 18px;
-    font-weight: 600;
-    margin: 4px 0;
+    font-weight: 700;
+}
+
+QFrame#panel,
+QGroupBox#playerBox,
+QGroupBox#settingsBox {
+    background-color: @panelBg;
+    border: 1px solid @border;
+    border-radius: 22px;
+}
+
+QFrame#libraryPanel {
+    border-image: url(@sidebarPanel) 120 120 120 120 stretch stretch;
+    border: 1px solid @borderStrong;
+    border-radius: 26px;
+}
+
+QGroupBox {
+    color: @muted;
+    font-weight: 650;
+    margin-top: 12px;
+    padding-top: 12px;
+}
+
+QStackedWidget#mediaStack,
+QLabel#coverArt,
+QVideoWidget#videoSurface {
+    background-color: @panelDeep;
+    border: 1px solid @borderStrong;
+    border-radius: 18px;
+}
+
+QLabel#trackTitle {
+    color: @heading;
+    font-size: 22px;
+    font-weight: 750;
 }
 
 QLabel#nowPlaying {
-    font-size: 16px;
-    font-weight: 600;
+    color: @heading;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QFrame#videoControls {
+    background: transparent;
+    border: none;
 }
 
 QPushButton {
-    min-height: 30px;
-    padding: 4px 12px;
+    border-image: url(@buttonReplacement) 240 260 240 260 stretch stretch;
+    color: @buttonText;
+    border: 1px solid @borderStrong;
+    border-radius: 18px;
+    min-height: 36px;
+    padding: 5px 18px;
+}
+
+QPushButton:hover {
+    color: @accentText;
+    border: 1px solid @accent;
+}
+
+QPushButton:pressed {
+    padding-top: 6px;
+    padding-bottom: 4px;
+}
+
+QPushButton#primaryButton,
+QPushButton#playButton {
+    border-image: url(@buttonReplacement) 240 260 240 260 stretch stretch;
+    color: @accentText;
+    border: 1px solid @accent;
+    font-weight: 800;
+}
+
+QPushButton#primaryButton:hover,
+QPushButton#playButton:hover {
+    color: @accentText;
+}
+
+QPushButton#playButton {
+    min-width: 86px;
+}
+
+QPushButton#transportButton {
+    min-width: 82px;
+    font-weight: 650;
+}
+
+QPushButton#ghostButton {
+    color: @buttonText;
 }
 
 QLineEdit,
 QComboBox {
-    min-height: 30px;
+    background-color: @panelDeep;
+    color: @text;
+    border: 1px solid @border;
+    border-radius: 18px;
+    min-height: 34px;
+    padding: 4px 10px;
+    selection-background-color: @accentSoft;
 }
 
-QTableWidget {
-    gridline-color: #dadde3;
-    selection-background-color: #dbeafe;
-    selection-color: #111827;
+QLineEdit#searchEdit,
+QLineEdit#pathEdit {
+    border: 1px solid @borderStrong;
+    background-color: @panelBg;
+}
+
+QLineEdit:focus,
+QComboBox:focus {
+    border: 1px solid @accent;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 24px;
+}
+
+QTableWidget#libraryTable,
+QListWidget#lyricsList,
+QListWidget#folderList {
+    background-color: @panelAlt;
+    color: @text;
+    border: 1px solid @border;
+    border-radius: 18px;
+    selection-background-color: @accentSoft;
+    selection-color: @heading;
+}
+
+QHeaderView::section {
+    background-color: @panelDeep;
+    color: @muted;
+    border: none;
+    padding: 8px;
+    font-weight: 700;
+}
+
+QTableWidget::item {
+    padding: 8px;
+    border-bottom: 1px solid @border;
+}
+
+QListWidget::item {
+    padding: 8px 6px;
+    border: none;
+}
+
+QListWidget#lyricsList::item:selected {
+    background: transparent;
+}
+
+QLabel#statusLabel[state="ok"] {
+    color: @ok;
+}
+
+QLabel#statusLabel[state="error"] {
+    color: @error;
+}
+
+QSlider::groove:horizontal {
+    height: 6px;
+    background: @border;
+    border-radius: 3px;
+}
+
+QSlider::sub-page:horizontal {
+    background: @accent;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    width: 16px;
+    margin: -5px 0;
+    border-radius: 8px;
+    background: @lyricActive;
+}
+
+QWidget#fullscreenControlBar {
+    background-color: rgba(8, 13, 20, 215);
+    border-top: 1px solid @borderStrong;
+}
+
+QVideoWidget#fullscreenVideoSurface {
+    background-color: #000000;
+}
+
+QLabel#fullscreenTimeLabel {
+    color: #f8fafc;
+    min-width: 110px;
 }

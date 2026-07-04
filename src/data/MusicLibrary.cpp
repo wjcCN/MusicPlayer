@@ -62,6 +62,7 @@ QList<MusicTrack> MusicLibrary::tracks() const
     QList<MusicTrack> result;
     QSqlQuery query(m_db);
     query.prepare("SELECT id, provider_id, title, artist, album, file_path, duration_ms, favorite, added_at "
+                  ", is_video "
                   "FROM tracks ORDER BY title COLLATE NOCASE, file_path COLLATE NOCASE");
 
     if (!query.exec()) {
@@ -119,8 +120,53 @@ int MusicLibrary::addFolder(const QString &folderPath)
     m_db.commit();
 
     emit libraryChanged();
-    emit statusMessage(tr("Scanned %1 supported audio file(s).").arg(scannedTracks.size()));
+    emit statusMessage(tr("Scanned %1 supported media file(s).").arg(scannedTracks.size()));
     return changed;
+}
+
+bool MusicLibrary::removeFolder(const QString &folderPath)
+{
+    const QFileInfo folderInfo(folderPath);
+    const QString normalizedPath = QDir::toNativeSeparators(folderInfo.absoluteFilePath());
+    const QString childPattern = normalizedPath.endsWith(QDir::separator())
+        ? normalizedPath + "%"
+        : normalizedPath + QDir::separator() + "%";
+
+    if (!m_db.transaction()) {
+        return false;
+    }
+
+    QSqlQuery folderQuery(m_db);
+    folderQuery.prepare("DELETE FROM folders WHERE path = ?");
+    folderQuery.addBindValue(normalizedPath);
+    if (!folderQuery.exec()) {
+        m_db.rollback();
+        return false;
+    }
+
+    QSqlQuery trackQuery(m_db);
+    trackQuery.prepare("DELETE FROM tracks WHERE file_path = ? OR file_path LIKE ?");
+    trackQuery.addBindValue(normalizedPath);
+    trackQuery.addBindValue(childPattern);
+    if (!trackQuery.exec()) {
+        m_db.rollback();
+        return false;
+    }
+
+    QSqlQuery queueQuery(m_db);
+    if (!queueQuery.exec("DELETE FROM playback_queue WHERE file_path NOT IN (SELECT file_path FROM tracks)")) {
+        m_db.rollback();
+        return false;
+    }
+
+    if (!m_db.commit()) {
+        m_db.rollback();
+        return false;
+    }
+
+    emit libraryChanged();
+    emit statusMessage(tr("Removed folder from the library: %1").arg(normalizedPath));
+    return true;
 }
 
 int MusicLibrary::rescanFolders()
@@ -175,7 +221,7 @@ QList<MusicTrack> MusicLibrary::loadQueue() const
 {
     QList<MusicTrack> result;
     QSqlQuery query(m_db);
-    query.prepare("SELECT t.id, t.provider_id, t.title, t.artist, t.album, t.file_path, t.duration_ms, t.favorite, t.added_at "
+    query.prepare("SELECT t.id, t.provider_id, t.title, t.artist, t.album, t.file_path, t.duration_ms, t.favorite, t.added_at, t.is_video "
                   "FROM playback_queue q JOIN tracks t ON t.file_path = q.file_path "
                   "ORDER BY q.position ASC");
 
@@ -251,6 +297,7 @@ bool MusicLibrary::ensureSchema()
         "album TEXT,"
         "file_path TEXT NOT NULL UNIQUE,"
         "duration_ms INTEGER NOT NULL DEFAULT 0,"
+        "is_video INTEGER NOT NULL DEFAULT 0,"
         "favorite INTEGER NOT NULL DEFAULT 0,"
         "last_played_at TEXT,"
         "added_at TEXT NOT NULL)",
@@ -272,16 +319,36 @@ bool MusicLibrary::ensureSchema()
         }
     }
 
+    bool hasVideoColumn = false;
+    QSqlQuery infoQuery(m_db);
+    if (infoQuery.exec("PRAGMA table_info(tracks)")) {
+        while (infoQuery.next()) {
+            if (infoQuery.value(1).toString() == "is_video") {
+                hasVideoColumn = true;
+                break;
+            }
+        }
+    }
+
+    if (!hasVideoColumn) {
+        QSqlQuery alterQuery(m_db);
+        if (!alterQuery.exec("ALTER TABLE tracks ADD COLUMN is_video INTEGER NOT NULL DEFAULT 0")) {
+            m_lastError = alterQuery.lastError().text();
+            return false;
+        }
+    }
+
     return true;
 }
 
 bool MusicLibrary::upsertTrack(const MusicTrack &track) const
 {
     QSqlQuery query(m_db);
-    query.prepare("INSERT INTO tracks(provider_id, title, artist, album, file_path, duration_ms, favorite, added_at) "
-                  "VALUES(?, ?, ?, ?, ?, ?, ?, ?) "
+    query.prepare("INSERT INTO tracks(provider_id, title, artist, album, file_path, duration_ms, is_video, favorite, added_at) "
+                  "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) "
                   "ON CONFLICT(file_path) DO UPDATE SET "
                   "title = excluded.title, "
+                  "is_video = excluded.is_video, "
                   "artist = CASE WHEN excluded.artist != '' THEN excluded.artist ELSE tracks.artist END, "
                   "album = CASE WHEN excluded.album != '' THEN excluded.album ELSE tracks.album END");
     query.addBindValue(track.providerId);
@@ -290,6 +357,7 @@ bool MusicLibrary::upsertTrack(const MusicTrack &track) const
     query.addBindValue(track.album);
     query.addBindValue(QDir::toNativeSeparators(track.filePath));
     query.addBindValue(track.durationMs);
+    query.addBindValue(track.isVideo ? 1 : 0);
     query.addBindValue(track.favorite ? 1 : 0);
     query.addBindValue(track.addedAt.isValid() ? track.addedAt.toString(Qt::ISODate)
                                                : QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
@@ -308,6 +376,7 @@ MusicTrack MusicLibrary::trackFromQuery(const QSqlQuery &query) const
     track.durationMs = query.value(6).toLongLong();
     track.favorite = query.value(7).toInt() != 0;
     track.addedAt = QDateTime::fromString(query.value(8).toString(), Qt::ISODate);
+    track.isVideo = query.value(9).toInt() != 0;
     return track;
 }
 

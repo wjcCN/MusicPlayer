@@ -3,6 +3,7 @@
 #include "core/MusicTrack.h"
 
 #include <QAudioOutput>
+#include <QImage>
 #include <QList>
 #include <QMediaPlayer>
 #include <QObject>
@@ -27,6 +28,8 @@ public:
     int currentIndex() const;
     PlaybackMode playbackMode() const;
     QMediaPlayer::PlaybackState playbackState() const;
+    qint64 position() const;
+    qint64 duration() const;
 
     void setQueue(const QList<MusicTrack> &tracks, int startIndex = -1);
     void playAt(int index);
@@ -39,6 +42,8 @@ public:
     void seek(qint64 positionMs);
     void setVolume(int volume);
     void setPlaybackMode(PlaybackMode mode);
+    void setPlaybackRate(qreal rate);
+    void setVideoOutput(QObject *output);
 
 signals:
     void queueChanged(const QList<MusicTrack> &queue);
@@ -47,6 +52,7 @@ signals:
     void positionChanged(qint64 positionMs);
     void durationChanged(qint64 durationMs);
     void durationLearned(const MusicTrack &track, qint64 durationMs);
+    void coverArtChanged(const QImage &image);
     void volumeChanged(int volume);
     void playbackModeChanged(PlaybackMode mode);
     void errorOccurred(const QString &message);

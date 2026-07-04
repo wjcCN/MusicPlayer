@@ -12,6 +12,7 @@ struct MusicTrack
     QString album;
     QString filePath;
     qint64 durationMs = 0;
+    bool isVideo = false;
     bool favorite = false;
     QDateTime addedAt;
 

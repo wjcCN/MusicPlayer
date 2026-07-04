@@ -1,23 +1,20 @@
 #pragma once
 
 #include "core/MusicTrack.h"
-#include "providers/MusicProvider.h"
 
 #include <QList>
 #include <QStringList>
 
-class LocalProvider final : public MusicProvider
+class LocalProvider final
 {
-    Q_OBJECT
-
 public:
-    explicit LocalProvider(QObject *parent = nullptr);
-
-    QString id() const override;
-    QString displayName() const override;
-    ProviderInfo info() const override;
+    QString id() const;
+    QString displayName() const;
 
     QList<MusicTrack> scanFolder(const QString &folderPath) const;
     static bool isSupportedFile(const QString &filePath);
+    static bool isVideoFile(const QString &filePath);
+    static QStringList supportedAudioSuffixes();
+    static QStringList supportedVideoSuffixes();
     static QStringList supportedSuffixes();
 };

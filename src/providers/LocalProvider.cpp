@@ -5,11 +5,6 @@
 #include <QDirIterator>
 #include <QFileInfo>
 
-LocalProvider::LocalProvider(QObject *parent)
-    : MusicProvider(parent)
-{
-}
-
 QString LocalProvider::id() const
 {
     return "local";
@@ -17,18 +12,7 @@ QString LocalProvider::id() const
 
 QString LocalProvider::displayName() const
 {
-    return tr("Local Files");
-}
-
-ProviderInfo LocalProvider::info() const
-{
-    return ProviderInfo{
-        id(),
-        displayName(),
-        ProviderAccess::Playable,
-        tr("Ready"),
-        tr("Scans and plays local audio files stored on this Windows device.")
-    };
+    return QStringLiteral("Local Files");
 }
 
 QList<MusicTrack> LocalProvider::scanFolder(const QString &folderPath) const
@@ -47,6 +31,7 @@ QList<MusicTrack> LocalProvider::scanFolder(const QString &folderPath) const
         track.providerId = id();
         track.title = info.completeBaseName();
         track.filePath = QDir::toNativeSeparators(info.absoluteFilePath());
+        track.isVideo = isVideoFile(track.filePath);
         track.addedAt = QDateTime::currentDateTimeUtc();
         tracks.append(track);
     }
@@ -60,7 +45,23 @@ bool LocalProvider::isSupportedFile(const QString &filePath)
     return supportedSuffixes().contains(suffix);
 }
 
-QStringList LocalProvider::supportedSuffixes()
+bool LocalProvider::isVideoFile(const QString &filePath)
+{
+    const QString suffix = QFileInfo(filePath).suffix().toLower();
+    return supportedVideoSuffixes().contains(suffix);
+}
+
+QStringList LocalProvider::supportedAudioSuffixes()
 {
     return {"mp3", "flac", "wav", "m4a", "aac", "ogg", "wma", "opus"};
+}
+
+QStringList LocalProvider::supportedVideoSuffixes()
+{
+    return {"mp4", "mkv", "avi", "mov", "wmv", "webm", "m4v", "flv"};
+}
+
+QStringList LocalProvider::supportedSuffixes()
+{
+    return supportedAudioSuffixes() + supportedVideoSuffixes();
 }

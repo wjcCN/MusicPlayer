@@ -1,25 +1,47 @@
 #include "ui/MainWindow.h"
 
+#include "core/LyricsParser.h"
+#include "ui/FolderManagerDialog.h"
+#include "ui/FullscreenVideoWindow.h"
+
+#include <QAbstractItemView>
+#include <QApplication>
 #include <QCloseEvent>
 #include <QDir>
+#include <QEvent>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFrame>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QKeyEvent>
+#include <QKeySequence>
+#include <QListWidgetItem>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPainterPath>
+#include <QShortcut>
 #include <QSignalBlocker>
+#include <QSizePolicy>
+#include <QStackedWidget>
+#include <QStyle>
 #include <QTableWidgetItem>
+#include <QTimer>
 #include <QVBoxLayout>
+#include <QVideoWidget>
 
 namespace
 {
 constexpr int FavoriteColumn = 0;
-constexpr int TitleColumn = 1;
-constexpr int ArtistColumn = 2;
-constexpr int AlbumColumn = 3;
-constexpr int DurationColumn = 4;
-constexpr int PathColumn = 5;
+constexpr int TypeColumn = 1;
+constexpr int TitleColumn = 2;
+constexpr int ArtistColumn = 3;
+constexpr int AlbumColumn = 4;
+constexpr int DurationColumn = 5;
+constexpr int PathColumn = 6;
+constexpr int CoverSize = 300;
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -27,6 +49,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     buildUi();
     connectSignals();
+    installShortcuts();
     loadInitialState();
 }
 
@@ -36,72 +59,234 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QWidget::closeEvent(event);
 }
 
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    const bool isVideoEventSource = watched == m_videoWidget;
+    if (!isVideoEventSource) {
+        return QWidget::eventFilter(watched, event);
+    }
+
+    if (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) {
+        auto *keyEvent = static_cast<QKeyEvent *>(event);
+        if (qobject_cast<QLineEdit *>(focusWidget())) {
+            return QWidget::eventFilter(watched, event);
+        }
+        if (handleVideoKeyEvent(keyEvent, event->type() == QEvent::KeyPress)) {
+            return true;
+        }
+    }
+
+    if (watched == m_videoWidget && event->type() == QEvent::MouseButtonDblClick) {
+        toggleVideoFullscreen();
+        return true;
+    }
+
+    if (watched == m_videoWidget && event->type() == QEvent::MouseButtonRelease) {
+        m_player.togglePlayPause();
+        return true;
+    }
+
+    return QWidget::eventFilter(watched, event);
+}
+
 void MainWindow::buildUi()
 {
+    setObjectName("appRoot");
     setWindowTitle(text(TextKey::WindowTitle));
-    resize(1180, 720);
+    resize(1360, 820);
 
-    m_addFolderButton = new QPushButton(this);
-    m_rescanButton = new QPushButton(this);
-    m_searchEdit = new QLineEdit(this);
-
-    m_libraryTitleLabel = new QLabel(this);
-    m_libraryTitleLabel->setObjectName("sectionTitle");
-
-    m_libraryTable = new QTableWidget(this);
-    m_libraryTable->setColumnCount(6);
-    m_libraryTable->verticalHeader()->setVisible(false);
-    m_libraryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_libraryTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_libraryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_libraryTable->setAlternatingRowColors(true);
-    m_libraryTable->horizontalHeader()->setStretchLastSection(true);
-    m_libraryTable->horizontalHeader()->setSectionResizeMode(TitleColumn, QHeaderView::Stretch);
-    m_libraryTable->horizontalHeader()->setSectionResizeMode(PathColumn, QHeaderView::ResizeToContents);
-    m_libraryTable->setColumnWidth(FavoriteColumn, 52);
-    m_libraryTable->setColumnWidth(DurationColumn, 88);
-
-    m_platformTitleLabel = new QLabel(this);
-    m_platformTitleLabel->setObjectName("sectionTitle");
-
-    m_platformTable = new QTableWidget(this);
-    m_platformTable->setColumnCount(3);
-    m_platformTable->verticalHeader()->setVisible(false);
-    m_platformTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_platformTable->setSelectionMode(QAbstractItemView::NoSelection);
-    m_platformTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    m_platformTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_platformTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
-    m_platformTable->setMaximumHeight(150);
+    m_appTitleLabel = new QLabel(this);
+    m_appTitleLabel->setObjectName("appTitle");
+    m_appSubtitleLabel = new QLabel(this);
+    m_appSubtitleLabel->setObjectName("appSubtitle");
 
     m_languageLabel = new QLabel(this);
     m_languageCombo = new QComboBox(this);
     m_languageCombo->addItem(QString(), QStringLiteral("zh"));
     m_languageCombo->addItem(QString(), QStringLiteral("en"));
 
+    m_themeLabel = new QLabel(this);
+    m_themeButton = new QPushButton(this);
+    m_themeButton->setObjectName("ghostButton");
+
     auto *settingsLayout = new QHBoxLayout;
+    settingsLayout->setContentsMargins(14, 10, 14, 10);
+    settingsLayout->setSpacing(10);
     settingsLayout->addWidget(m_languageLabel);
     settingsLayout->addWidget(m_languageCombo);
-    settingsLayout->addStretch();
+    settingsLayout->addSpacing(8);
+    settingsLayout->addWidget(m_themeLabel);
+    settingsLayout->addWidget(m_themeButton);
 
     m_settingsBox = new QGroupBox(this);
+    m_settingsBox->setObjectName("settingsBox");
     m_settingsBox->setLayout(settingsLayout);
+
+    auto *headerTextLayout = new QVBoxLayout;
+    headerTextLayout->setSpacing(3);
+    headerTextLayout->addWidget(m_appTitleLabel);
+    headerTextLayout->addWidget(m_appSubtitleLabel);
+
+    auto *headerLayout = new QHBoxLayout;
+    headerLayout->setSpacing(16);
+    headerLayout->addLayout(headerTextLayout, 1);
+    headerLayout->addWidget(m_settingsBox);
+
+    m_addFolderButton = new QPushButton(this);
+    m_addFolderButton->setObjectName("primaryButton");
+    m_foldersButton = new QPushButton(this);
+    m_foldersButton->setObjectName("ghostButton");
+    m_rescanButton = new QPushButton(this);
+    m_rescanButton->setObjectName("ghostButton");
+    m_searchEdit = new QLineEdit(this);
+    m_searchEdit->setObjectName("searchEdit");
+    m_searchEdit->setClearButtonEnabled(true);
+
+    auto *toolbarLayout = new QHBoxLayout;
+    toolbarLayout->setSpacing(10);
+    toolbarLayout->addWidget(m_addFolderButton);
+    toolbarLayout->addWidget(m_foldersButton);
+    toolbarLayout->addWidget(m_rescanButton);
+    toolbarLayout->addWidget(m_searchEdit, 1);
+
+    m_libraryTitleLabel = new QLabel(this);
+    m_libraryTitleLabel->setObjectName("sectionTitle");
+
+    m_libraryTable = new QTableWidget(this);
+    m_libraryTable->setObjectName("libraryTable");
+    m_libraryTable->setColumnCount(7);
+    m_libraryTable->verticalHeader()->setVisible(false);
+    m_libraryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_libraryTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_libraryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_libraryTable->setAlternatingRowColors(false);
+    m_libraryTable->horizontalHeader()->setStretchLastSection(true);
+    m_libraryTable->horizontalHeader()->setSectionResizeMode(TitleColumn, QHeaderView::Stretch);
+    m_libraryTable->horizontalHeader()->setSectionResizeMode(PathColumn, QHeaderView::ResizeToContents);
+    m_libraryTable->setColumnWidth(FavoriteColumn, 58);
+    m_libraryTable->setColumnWidth(TypeColumn, 72);
+    m_libraryTable->setColumnWidth(DurationColumn, 90);
+    m_libraryTable->setShowGrid(false);
+
+    auto *libraryPanel = new QFrame(this);
+    libraryPanel->setObjectName("libraryPanel");
+    auto *libraryLayout = new QVBoxLayout(libraryPanel);
+    libraryLayout->setContentsMargins(18, 16, 18, 18);
+    libraryLayout->setSpacing(12);
+    libraryLayout->addWidget(m_libraryTitleLabel);
+    libraryLayout->addLayout(toolbarLayout);
+    libraryLayout->addWidget(m_libraryTable, 1);
+
+    m_coverLabel = new QLabel(this);
+    m_coverLabel->setObjectName("coverArt");
+    m_coverLabel->setMinimumSize(CoverSize, CoverSize);
+    m_coverLabel->setAlignment(Qt::AlignCenter);
+    m_coverLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+    m_videoWidget = new QVideoWidget(this);
+    m_videoWidget->setObjectName("videoSurface");
+    m_videoWidget->setAspectRatioMode(Qt::KeepAspectRatio);
+    m_videoWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_videoWidget->setFocusPolicy(Qt::StrongFocus);
+    m_videoWidget->installEventFilter(this);
+    qApp->installEventFilter(this);
+
+    m_rightHoldTimer = new QTimer(this);
+    m_rightHoldTimer->setSingleShot(true);
+    connect(m_rightHoldTimer, &QTimer::timeout, this, [this] {
+        if (!m_rightKeyPressed) {
+            return;
+        }
+        m_rightLongPressActive = true;
+        m_player.setPlaybackRate(2.0);
+        setStatus(QStringLiteral("2x"));
+    });
+
+    m_mediaStack = new QStackedWidget(this);
+    m_mediaStack->setObjectName("mediaStack");
+    m_mediaStack->setMinimumSize(360, 260);
+    m_mediaStack->setMaximumHeight(340);
+    m_mediaStack->addWidget(m_coverLabel);
+    m_mediaStack->addWidget(m_videoWidget);
+
+    m_trackTitleLabel = new QLabel(this);
+    m_trackTitleLabel->setObjectName("trackTitle");
+    m_trackTitleLabel->setAlignment(Qt::AlignCenter);
+    m_trackTitleLabel->setWordWrap(true);
+    m_trackArtistLabel = new QLabel(this);
+    m_trackArtistLabel->setObjectName("trackArtist");
+    m_trackArtistLabel->setAlignment(Qt::AlignCenter);
+    m_trackArtistLabel->setWordWrap(true);
+
+    m_videoScaleLabel = new QLabel(this);
+    m_videoScaleCombo = new QComboBox(this);
+    m_videoScaleCombo->addItem(QString(), 0);
+    m_videoScaleCombo->addItem(QString(), 1);
+    m_videoScaleCombo->addItem(QString(), 2);
+    m_audioOnlyButton = new QPushButton(this);
+    m_audioOnlyButton->setObjectName("ghostButton");
+    m_audioOnlyButton->setCheckable(true);
+    m_fullscreenButton = new QPushButton(this);
+    m_fullscreenButton->setObjectName("ghostButton");
+
+    auto *videoControlsLayout = new QHBoxLayout;
+    videoControlsLayout->setContentsMargins(0, 0, 0, 0);
+    videoControlsLayout->setSpacing(8);
+    videoControlsLayout->addWidget(m_videoScaleLabel);
+    videoControlsLayout->addWidget(m_videoScaleCombo, 1);
+    videoControlsLayout->addWidget(m_audioOnlyButton);
+    videoControlsLayout->addWidget(m_fullscreenButton);
+
+    m_videoControlsFrame = new QFrame(this);
+    m_videoControlsFrame->setObjectName("videoControls");
+    m_videoControlsFrame->setLayout(videoControlsLayout);
+
+    m_lyricsTitleLabel = new QLabel(this);
+    m_lyricsTitleLabel->setObjectName("sectionTitle");
+
+    m_lyricsList = new QListWidget(this);
+    m_lyricsList->setObjectName("lyricsList");
+    m_lyricsList->setSelectionMode(QAbstractItemView::NoSelection);
+    m_lyricsList->setFocusPolicy(Qt::NoFocus);
+
+    auto *nowPlayingPanel = new QFrame(this);
+    nowPlayingPanel->setObjectName("panel");
+    auto *nowPlayingLayout = new QVBoxLayout(nowPlayingPanel);
+    nowPlayingLayout->setContentsMargins(22, 20, 22, 20);
+    nowPlayingLayout->setSpacing(14);
+    nowPlayingLayout->addWidget(m_mediaStack, 0);
+    nowPlayingLayout->addWidget(m_videoControlsFrame);
+    nowPlayingLayout->addWidget(m_trackTitleLabel);
+    nowPlayingLayout->addWidget(m_trackArtistLabel);
+    nowPlayingLayout->addSpacing(4);
+    nowPlayingLayout->addWidget(m_lyricsTitleLabel);
+    nowPlayingLayout->addWidget(m_lyricsList, 1);
+
+    auto *contentLayout = new QHBoxLayout;
+    contentLayout->setSpacing(18);
+    contentLayout->addWidget(libraryPanel, 3);
+    contentLayout->addWidget(nowPlayingPanel, 2);
 
     m_nowPlayingLabel = new QLabel(this);
     m_nowPlayingLabel->setObjectName("nowPlaying");
-    m_timeLabel = new QLabel("00:00 / 00:00", this);
+    m_timeLabel = new QLabel(QStringLiteral("00:00 / 00:00"), this);
+    m_timeLabel->setObjectName("timeLabel");
     m_statusLabel = new QLabel(this);
+    m_statusLabel->setObjectName("statusLabel");
 
     m_previousButton = new QPushButton(this);
+    m_previousButton->setObjectName("transportButton");
     m_playPauseButton = new QPushButton(this);
+    m_playPauseButton->setObjectName("playButton");
     m_nextButton = new QPushButton(this);
+    m_nextButton->setObjectName("transportButton");
 
     m_positionSlider = new QSlider(Qt::Horizontal, this);
     m_positionSlider->setRange(0, 0);
     m_volumeSlider = new QSlider(Qt::Horizontal, this);
     m_volumeSlider->setRange(0, 100);
     m_volumeSlider->setValue(70);
-    m_volumeSlider->setMaximumWidth(160);
+    m_volumeSlider->setMaximumWidth(170);
 
     m_modeCombo = new QComboBox(this);
     m_modeCombo->addItem(QString(), static_cast<int>(PlaybackMode::Sequential));
@@ -109,52 +294,50 @@ void MainWindow::buildUi()
     m_modeCombo->addItem(QString(), static_cast<int>(PlaybackMode::LoopOne));
     m_modeCombo->addItem(QString(), static_cast<int>(PlaybackMode::Shuffle));
 
-    auto *topControls = new QHBoxLayout;
-    topControls->addWidget(m_addFolderButton);
-    topControls->addWidget(m_rescanButton);
-    topControls->addSpacing(12);
-    topControls->addWidget(m_searchEdit, 1);
-
-    auto *libraryLayout = new QVBoxLayout;
-    libraryLayout->addWidget(m_libraryTitleLabel);
-    libraryLayout->addLayout(topControls);
-    libraryLayout->addWidget(m_libraryTable, 1);
-    libraryLayout->addWidget(m_settingsBox);
-    libraryLayout->addWidget(m_platformTitleLabel);
-    libraryLayout->addWidget(m_platformTable);
-
-    auto *playbackButtons = new QHBoxLayout;
-    playbackButtons->addWidget(m_previousButton);
-    playbackButtons->addWidget(m_playPauseButton);
-    playbackButtons->addWidget(m_nextButton);
-    playbackButtons->addStretch();
     m_modeLabel = new QLabel(this);
-    playbackButtons->addWidget(m_modeLabel);
-    playbackButtons->addWidget(m_modeCombo);
-    playbackButtons->addSpacing(16);
     m_volumeLabel = new QLabel(this);
-    playbackButtons->addWidget(m_volumeLabel);
-    playbackButtons->addWidget(m_volumeSlider);
+
+    auto *transportLayout = new QHBoxLayout;
+    transportLayout->setSpacing(10);
+    transportLayout->addWidget(m_previousButton);
+    transportLayout->addWidget(m_playPauseButton);
+    transportLayout->addWidget(m_nextButton);
+    transportLayout->addSpacing(14);
+    transportLayout->addWidget(m_modeLabel);
+    transportLayout->addWidget(m_modeCombo);
+    transportLayout->addStretch();
+    transportLayout->addWidget(m_volumeLabel);
+    transportLayout->addWidget(m_volumeSlider);
 
     auto *playerLayout = new QVBoxLayout;
+    playerLayout->setContentsMargins(18, 14, 18, 14);
+    playerLayout->setSpacing(8);
     playerLayout->addWidget(m_nowPlayingLabel);
     playerLayout->addWidget(m_positionSlider);
 
-    auto *timeStatusLayout = new QHBoxLayout;
-    timeStatusLayout->addWidget(m_timeLabel);
-    timeStatusLayout->addStretch();
-    timeStatusLayout->addWidget(m_statusLabel);
-    playerLayout->addLayout(timeStatusLayout);
-    playerLayout->addLayout(playbackButtons);
+    auto *statusLayout = new QHBoxLayout;
+    statusLayout->addWidget(m_timeLabel);
+    statusLayout->addStretch();
+    statusLayout->addWidget(m_statusLabel);
+    playerLayout->addLayout(statusLayout);
+    playerLayout->addLayout(transportLayout);
 
     m_playerBox = new QGroupBox(this);
+    m_playerBox->setObjectName("playerBox");
     m_playerBox->setLayout(playerLayout);
 
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->addLayout(libraryLayout, 1);
+    mainLayout->setContentsMargins(22, 20, 22, 20);
+    mainLayout->setSpacing(18);
+    mainLayout->addLayout(headerLayout);
+    mainLayout->addLayout(contentLayout, 1);
     mainLayout->addWidget(m_playerBox);
     setLayout(mainLayout);
 
+    setCoverFromPixmap(defaultCoverPixmap());
+    refreshVideoControls({});
+    showNoLyrics();
+    applyTheme();
     applyLanguage();
 }
 
@@ -173,6 +356,8 @@ void MainWindow::connectSignals()
         }
         setStatus(text(TextKey::FolderScanned).arg(changed));
     });
+
+    connect(m_foldersButton, &QPushButton::clicked, this, &MainWindow::showFoldersDialog);
 
     connect(m_rescanButton, &QPushButton::clicked, this, [this] {
         const int changed = m_library.rescanFolders();
@@ -205,6 +390,10 @@ void MainWindow::connectSignals()
         m_player.playAt(index);
     });
 
+    connect(m_themeButton, &QPushButton::clicked, this, [this] {
+        setTheme(m_theme == Theme::Dark ? Theme::Light : Theme::Dark);
+    });
+
     connect(m_previousButton, &QPushButton::clicked, &m_player, &PlaybackController::previous);
     connect(m_playPauseButton, &QPushButton::clicked, &m_player, &PlaybackController::togglePlayPause);
     connect(m_nextButton, &QPushButton::clicked, &m_player, &PlaybackController::next);
@@ -216,6 +405,15 @@ void MainWindow::connectSignals()
     connect(m_languageCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
         setLanguage(languageFromCode(m_languageCombo->itemData(index).toString()));
     });
+    connect(m_videoScaleCombo, &QComboBox::currentIndexChanged, this, [this] {
+        applyVideoScale();
+    });
+    connect(m_audioOnlyButton, &QPushButton::toggled, this, [this](bool checked) {
+        m_audioOnlyVideo = checked;
+        syncVideoOutput();
+        applyLanguage();
+    });
+    connect(m_fullscreenButton, &QPushButton::clicked, this, &MainWindow::toggleVideoFullscreen);
 
     connect(m_positionSlider, &QSlider::sliderPressed, this, [this] {
         m_seeking = true;
@@ -226,9 +424,12 @@ void MainWindow::connectSignals()
     });
 
     connect(&m_player, &PlaybackController::currentTrackChanged, this, [this](const MusicTrack &track) {
-        m_nowPlayingLabel->setText(text(TextKey::NowPlaying).arg(track.displayTitle()));
+        loadTrackPresentation(track);
         m_library.markPlayed(track.filePath);
         setStatus(text(TextKey::Playing).arg(track.displayTitle()));
+    });
+    connect(&m_player, &PlaybackController::coverArtChanged, this, [this](const QImage &image) {
+        setCoverFromImage(image);
     });
     connect(&m_player, &PlaybackController::playbackStateChanged, this, &MainWindow::applyPlaybackState);
     connect(&m_player, &PlaybackController::positionChanged, this, [this](qint64 position) {
@@ -236,6 +437,7 @@ void MainWindow::connectSignals()
             m_positionSlider->setValue(static_cast<int>(position));
         }
         updatePositionLabel(position, m_currentDurationMs);
+        updateActiveLyric(position);
     });
     connect(&m_player, &PlaybackController::durationChanged, this, [this](qint64 duration) {
         m_currentDurationMs = duration;
@@ -257,6 +459,27 @@ void MainWindow::connectSignals()
     connect(&m_library, &MusicLibrary::statusMessage, this, &MainWindow::setStatus);
 }
 
+void MainWindow::installShortcuts()
+{
+    auto *spaceShortcut = new QShortcut(QKeySequence(Qt::Key_Space), this);
+    spaceShortcut->setContext(Qt::WindowShortcut);
+    connect(spaceShortcut, &QShortcut::activated, this, [this] {
+        if (qobject_cast<QLineEdit *>(focusWidget())) {
+            return;
+        }
+        m_player.togglePlayPause();
+    });
+
+    auto *mediaToggleShortcut = new QShortcut(QKeySequence(Qt::Key_MediaTogglePlayPause), this);
+    connect(mediaToggleShortcut, &QShortcut::activated, &m_player, &PlaybackController::togglePlayPause);
+
+    auto *previousShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Left), this);
+    connect(previousShortcut, &QShortcut::activated, &m_player, &PlaybackController::previous);
+
+    auto *nextShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Right), this);
+    connect(nextShortcut, &QShortcut::activated, &m_player, &PlaybackController::next);
+}
+
 void MainWindow::loadInitialState()
 {
     if (!m_library.open()) {
@@ -267,6 +490,7 @@ void MainWindow::loadInitialState()
 
     m_libraryReady = true;
     setLanguage(languageFromCode(m_library.setting("language", "zh")));
+    setTheme(themeFromCode(m_library.setting("theme", "dark")));
 
     const int volume = m_library.setting("volume", "70").toInt();
     m_volumeSlider->setValue(qBound(0, volume, 100));
@@ -278,8 +502,16 @@ void MainWindow::loadInitialState()
         m_modeCombo->setCurrentIndex(modeIndex);
     }
 
+    const int videoScale = m_library.setting("video_scale", "0").toInt();
+    const int videoScaleIndex = m_videoScaleCombo->findData(videoScale);
+    if (videoScaleIndex >= 0) {
+        m_videoScaleCombo->setCurrentIndex(videoScaleIndex);
+    }
+    m_audioOnlyVideo = m_library.setting("video_audio_only", "0") == "1";
+    m_audioOnlyButton->setChecked(m_audioOnlyVideo);
+    applyVideoScale();
+
     refreshLibraryTable();
-    refreshPlatformTable();
 
     const QList<MusicTrack> savedQueue = m_library.loadQueue();
     if (!savedQueue.isEmpty()) {
@@ -292,31 +524,38 @@ void MainWindow::loadInitialState()
 void MainWindow::applyLanguage()
 {
     setWindowTitle(text(TextKey::WindowTitle));
+    m_appTitleLabel->setText(text(TextKey::WindowTitle));
+    m_appSubtitleLabel->setText(text(TextKey::AppSubtitle));
     m_addFolderButton->setText(text(TextKey::AddFolder));
+    m_foldersButton->setText(text(TextKey::ShowFolders));
     m_rescanButton->setText(text(TextKey::Rescan));
     m_searchEdit->setPlaceholderText(text(TextKey::SearchPlaceholder));
     m_libraryTitleLabel->setText(text(TextKey::LocalMusic));
-    m_platformTitleLabel->setText(text(TextKey::OfficialPlatformAccess));
     m_settingsBox->setTitle(text(TextKey::Settings));
     m_languageLabel->setText(text(TextKey::Language));
+    m_themeLabel->setText(text(TextKey::Theme));
+    m_themeButton->setText(text(m_theme == Theme::Dark ? TextKey::SwitchToLight : TextKey::SwitchToDark));
     m_playerBox->setTitle(text(TextKey::Playback));
     m_modeLabel->setText(text(TextKey::Mode));
     m_volumeLabel->setText(text(TextKey::Volume));
     m_previousButton->setText(text(TextKey::Previous));
     m_nextButton->setText(text(TextKey::Next));
+    m_lyricsTitleLabel->setText(text(TextKey::Lyrics));
+    m_videoScaleLabel->setText(text(TextKey::VideoScale));
+    m_audioOnlyButton->setText(text(m_audioOnlyVideo ? TextKey::ShowVideo : TextKey::AudioOnly));
+    m_fullscreenButton->setText(text(TextKey::Fullscreen));
+    if (m_fullscreenWindow) {
+        m_fullscreenWindow->setEnglish(m_language == Language::English);
+    }
 
     m_libraryTable->setHorizontalHeaderLabels({
         text(TextKey::Favorite),
+        text(TextKey::Type),
         text(TextKey::Title),
         text(TextKey::Artist),
         text(TextKey::Album),
         text(TextKey::Length),
         text(TextKey::Path)
-    });
-    m_platformTable->setHorizontalHeaderLabels({
-        text(TextKey::Platform),
-        text(TextKey::Status),
-        text(TextKey::Requirement)
     });
 
     {
@@ -342,17 +581,35 @@ void MainWindow::applyLanguage()
         }
     }
 
+    {
+        const QSignalBlocker blocker(m_videoScaleCombo);
+        const int currentData = m_videoScaleCombo->currentData().toInt();
+        m_videoScaleCombo->setItemText(0, text(TextKey::Fit));
+        m_videoScaleCombo->setItemText(1, text(TextKey::Fill));
+        m_videoScaleCombo->setItemText(2, text(TextKey::Stretch));
+        const int scaleIndex = m_videoScaleCombo->findData(currentData);
+        if (scaleIndex >= 0) {
+            m_videoScaleCombo->setCurrentIndex(scaleIndex);
+        }
+    }
+
     const MusicTrack currentTrack = m_player.currentTrack();
     if (currentTrack.filePath.isEmpty()) {
         m_nowPlayingLabel->setText(text(TextKey::NoTrackSelected));
+        m_trackTitleLabel->setText(text(TextKey::NoTrackSelected));
+        m_trackArtistLabel->setText(text(TextKey::ShortcutHint));
     } else {
         m_nowPlayingLabel->setText(text(TextKey::NowPlaying).arg(currentTrack.displayTitle()));
+        m_trackTitleLabel->setText(currentTrack.displayTitle());
+        m_trackArtistLabel->setText(currentTrack.artist.isEmpty() ? text(TextKey::NoArtist) : currentTrack.artist);
     }
 
     applyPlaybackState(m_player.playbackState());
-    refreshPlatformTable();
     if (m_libraryReady) {
         refreshLibraryTable();
+    }
+    if (m_lyrics.isEmpty()) {
+        showNoLyrics();
     }
     if (m_statusLabel->text().isEmpty()) {
         setStatus(text(TextKey::Ready));
@@ -367,7 +624,83 @@ void MainWindow::setLanguage(Language language)
     }
 
     m_language = language;
-    m_library.setSetting("language", languageCode());
+    if (m_libraryReady) {
+        m_library.setSetting("language", languageCode());
+    }
+    applyLanguage();
+}
+
+void MainWindow::applyTheme()
+{
+    qApp->setStyleSheet({});
+    qApp->setStyleSheet(themeStyleSheet());
+
+    const QWidgetList widgets = qApp->allWidgets();
+    for (QWidget *widget : widgets) {
+        if (!widget) {
+            continue;
+        }
+        widget->style()->unpolish(widget);
+        widget->style()->polish(widget);
+        widget->update();
+    }
+
+    if (m_themeButton) {
+        m_themeButton->setText(text(m_theme == Theme::Dark ? TextKey::SwitchToLight : TextKey::SwitchToDark));
+    }
+    m_activeLyricIndex = -1;
+    updateActiveLyric(m_positionSlider ? m_positionSlider->value() : 0);
+}
+
+QString MainWindow::themeStyleSheet() const
+{
+    QFile styleFile(":/styles/app.qss");
+    if (!styleFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+
+    QString style = QString::fromUtf8(styleFile.readAll());
+    const bool light = m_theme == Theme::Light;
+
+    style.replace("@buttonSurface", ":/images/button-surface.png");
+    style.replace("@buttonReplacement", light ? ":/images/light-button-round.png" : ":/images/button-replacement.png");
+    style.replace("@mainBackground", light ? ":/images/light-main-background.png" : ":/images/main-background.png");
+    style.replace("@dialogBackground", light ? ":/images/light-dialog-background.png" : ":/images/dialog-background.png");
+    style.replace("@sidebarPanel", light ? ":/images/light-sidebar-panel.png" : ":/images/sidebar-panel.png");
+    style.replace("@borderStrong", light ? "#b9c8d9" : "#31506a");
+    style.replace("@buttonHover", light ? "#eef4fa" : "#29384f");
+    style.replace("@buttonText", light ? "#1f2937" : "#eef4fb");
+    style.replace("@accentText", light ? "#0f766e" : "#f8ffff");
+    style.replace("@accentSoft", light ? "#ccfbf1" : "#1d5b62");
+    style.replace("@lyricActive", light ? "#0f766e" : "#f7d88f");
+    style.replace("@windowBg", light ? "#f4f7fb" : "#0b1018");
+    style.replace("@panelDeep", light ? "#eaf0f7" : "#080d14");
+    style.replace("@panelAlt", light ? "#eef4fa" : "#0f1724");
+    style.replace("@panelBg", light ? "#ffffff" : "#131b27");
+    style.replace("@ghostBg", light ? "#ffffff" : "#111827");
+    style.replace("@heading", light ? "#111827" : "#f8fafc");
+    style.replace("@buttonBg", light ? "#f8fafc" : "#1e293b");
+    style.replace("@border", light ? "#dbe4f0" : "#253246");
+    style.replace("@accent", light ? "#0f766e" : "#2dd4bf");
+    style.replace("@muted", light ? "#64748b" : "#90a0b7");
+    style.replace("@error", light ? "#b91c1c" : "#fca5a5");
+    style.replace("@text", light ? "#16202f" : "#eef4fb");
+    style.replace("@ok", light ? "#0f766e" : "#5eead4");
+    return style;
+}
+
+void MainWindow::setTheme(Theme theme)
+{
+    if (m_theme == theme) {
+        applyTheme();
+        return;
+    }
+
+    m_theme = theme;
+    if (m_libraryReady) {
+        m_library.setSetting("theme", themeCode());
+    }
+    applyTheme();
     applyLanguage();
 }
 
@@ -378,7 +711,8 @@ void MainWindow::refreshLibraryTable()
     m_filteredTracks.clear();
 
     for (const MusicTrack &track : m_allTracks) {
-        const QString haystack = QString("%1 %2 %3 %4").arg(track.title, track.artist, track.album, track.filePath);
+        const QString mediaType = track.isVideo ? text(TextKey::Video) : text(TextKey::Audio);
+        const QString haystack = QString("%1 %2 %3 %4 %5").arg(track.title, track.artist, track.album, track.filePath, mediaType);
         if (filter.isEmpty() || haystack.contains(filter, Qt::CaseInsensitive)) {
             m_filteredTracks.append(track);
         }
@@ -392,6 +726,11 @@ void MainWindow::refreshLibraryTable()
         auto *favoriteItem = new QTableWidgetItem(track.favorite ? text(TextKey::Yes) : QString());
         favoriteItem->setTextAlignment(Qt::AlignCenter);
         m_libraryTable->setItem(row, FavoriteColumn, favoriteItem);
+
+        auto *typeItem = new QTableWidgetItem(track.isVideo ? text(TextKey::Video) : text(TextKey::Audio));
+        typeItem->setTextAlignment(Qt::AlignCenter);
+        m_libraryTable->setItem(row, TypeColumn, typeItem);
+
         m_libraryTable->setItem(row, TitleColumn, new QTableWidgetItem(track.displayTitle()));
         m_libraryTable->setItem(row, ArtistColumn, new QTableWidgetItem(track.artist.isEmpty() ? text(TextKey::Unknown) : track.artist));
         m_libraryTable->setItem(row, AlbumColumn, new QTableWidgetItem(track.album.isEmpty() ? text(TextKey::Unknown) : track.album));
@@ -401,39 +740,13 @@ void MainWindow::refreshLibraryTable()
         if (!fileInfo.exists()) {
             for (int column = 0; column < m_libraryTable->columnCount(); ++column) {
                 if (auto *item = m_libraryTable->item(row, column)) {
-                    item->setForeground(Qt::gray);
+                    item->setForeground(QColor(m_theme == Theme::Dark ? "#7f8da3" : "#9aa4b2"));
                 }
             }
         }
     }
 
     setStatus(text(TextKey::LocalTracks).arg(m_filteredTracks.size()));
-}
-
-void MainWindow::refreshPlatformTable()
-{
-    const QList<ProviderInfo> providers = m_providerRegistry.providers();
-    m_platformTable->setRowCount(providers.size());
-
-    for (int row = 0; row < providers.size(); ++row) {
-        const ProviderInfo &provider = providers.at(row);
-        TextKey platformNameKey = TextKey::QqMusic;
-        if (provider.id == "netease") {
-            platformNameKey = TextKey::NeteaseMusic;
-        } else if (provider.id == "kugou") {
-            platformNameKey = TextKey::KugouMusic;
-        }
-        m_platformTable->setItem(row, 0, new QTableWidgetItem(text(platformNameKey)));
-        m_platformTable->setItem(row, 1, new QTableWidgetItem(text(TextKey::NotConfigured)));
-
-        TextKey requirementKey = TextKey::QqMusicRequirement;
-        if (provider.id == "netease") {
-            requirementKey = TextKey::NeteaseRequirement;
-        } else if (provider.id == "kugou") {
-            requirementKey = TextKey::KugouRequirement;
-        }
-        m_platformTable->setItem(row, 2, new QTableWidgetItem(text(requirementKey)));
-    }
 }
 
 void MainWindow::setStatus(const QString &message)
@@ -453,10 +766,331 @@ void MainWindow::updatePositionLabel(qint64 positionMs, qint64 durationMs)
 
 void MainWindow::savePlaybackState()
 {
+    if (!m_libraryReady) {
+        return;
+    }
+
     m_library.saveQueue(m_player.queue());
     m_library.setSetting("volume", QString::number(m_volumeSlider->value()));
     m_library.setSetting("playback_mode", QString::number(static_cast<int>(m_player.playbackMode())));
     m_library.setSetting("language", languageCode());
+    m_library.setSetting("theme", themeCode());
+    m_library.setSetting("video_scale", QString::number(m_videoScaleCombo->currentData().toInt()));
+    m_library.setSetting("video_audio_only", m_audioOnlyVideo ? "1" : "0");
+}
+
+void MainWindow::showFoldersDialog()
+{
+    if (!m_libraryReady) {
+        setStatus(text(TextKey::LibraryOpenFailed).arg(m_library.lastError()));
+        return;
+    }
+
+    FolderManagerDialog dialog(&m_library, m_language == Language::English, this);
+    connect(&dialog, &FolderManagerDialog::foldersChanged, this, [this] {
+        refreshLibraryTable();
+        if (m_player.queue().isEmpty() && !m_allTracks.isEmpty()) {
+            m_player.setQueue(m_allTracks);
+        }
+    });
+    dialog.exec();
+}
+
+void MainWindow::loadTrackPresentation(const MusicTrack &track)
+{
+    m_trackTitleLabel->setText(track.displayTitle());
+    m_trackArtistLabel->setText(track.artist.isEmpty() ? text(TextKey::NoArtist) : track.artist);
+    m_nowPlayingLabel->setText(text(TextKey::NowPlaying).arg(track.displayTitle()));
+
+    const QPixmap sidecarCover = coverFromSidecarFile(track);
+    setCoverFromPixmap(sidecarCover.isNull() ? defaultCoverPixmap() : sidecarCover);
+    refreshMediaDisplay(track);
+    loadLyricsForTrack(track);
+}
+
+void MainWindow::loadLyricsForTrack(const MusicTrack &track)
+{
+    m_lyrics = LyricsParser::parseLrcFile(LyricsParser::lrcPathForAudioFile(track.filePath));
+    m_activeLyricIndex = -1;
+    m_lyricsList->clear();
+
+    if (m_lyrics.isEmpty()) {
+        showNoLyrics();
+        return;
+    }
+
+    for (const LyricLine &line : m_lyrics) {
+        auto *item = new QListWidgetItem(line.text);
+        item->setTextAlignment(Qt::AlignCenter);
+        item->setForeground(QColor(m_theme == Theme::Dark ? "#9ba8be" : "#68768a"));
+        m_lyricsList->addItem(item);
+    }
+
+    updateActiveLyric(0);
+}
+
+void MainWindow::updateActiveLyric(qint64 positionMs)
+{
+    if (m_lyrics.isEmpty()) {
+        return;
+    }
+
+    int activeIndex = -1;
+    for (int i = 0; i < m_lyrics.size(); ++i) {
+        if (m_lyrics.at(i).timeMs <= positionMs + 120) {
+            activeIndex = i;
+        } else {
+            break;
+        }
+    }
+
+    if (activeIndex < 0 || activeIndex == m_activeLyricIndex) {
+        return;
+    }
+
+    for (int i = 0; i < m_lyricsList->count(); ++i) {
+        QListWidgetItem *item = m_lyricsList->item(i);
+        QFont font = item->font();
+        font.setBold(i == activeIndex);
+        font.setPointSize(i == activeIndex ? 14 : 11);
+        item->setFont(font);
+        item->setForeground(i == activeIndex
+                                ? QColor(m_theme == Theme::Dark ? "#f7d88f" : "#0f766e")
+                                : QColor(m_theme == Theme::Dark ? "#9ba8be" : "#68768a"));
+    }
+
+    m_activeLyricIndex = activeIndex;
+    m_lyricsList->setCurrentRow(activeIndex);
+    m_lyricsList->scrollToItem(m_lyricsList->item(activeIndex), QAbstractItemView::PositionAtCenter);
+}
+
+void MainWindow::showNoLyrics()
+{
+    m_activeLyricIndex = -1;
+    m_lyricsList->clear();
+    auto *item = new QListWidgetItem(text(TextKey::NoLyrics));
+    item->setTextAlignment(Qt::AlignCenter);
+    item->setForeground(QColor(m_theme == Theme::Dark ? "#9ba8be" : "#68768a"));
+    m_lyricsList->addItem(item);
+}
+
+void MainWindow::refreshMediaDisplay(const MusicTrack &track)
+{
+    refreshVideoControls(track);
+    syncVideoOutput();
+}
+
+void MainWindow::refreshVideoControls(const MusicTrack &track)
+{
+    const bool isVideo = track.isVideo && !track.filePath.isEmpty();
+    m_videoControlsFrame->setVisible(isVideo);
+    m_videoScaleCombo->setEnabled(isVideo);
+    m_audioOnlyButton->setEnabled(isVideo);
+    m_fullscreenButton->setEnabled(isVideo && !m_audioOnlyVideo);
+}
+
+void MainWindow::syncVideoOutput()
+{
+    const MusicTrack track = m_player.currentTrack();
+    const bool showVideo = track.isVideo && !m_audioOnlyVideo;
+
+    if (showVideo) {
+        if (m_fullscreenWindow) {
+            m_player.setVideoOutput(m_fullscreenWindow->videoWidget());
+        } else {
+            m_player.setVideoOutput(m_videoWidget);
+        }
+        m_mediaStack->setCurrentWidget(m_videoWidget);
+    } else {
+        if (m_fullscreenWindow) {
+            m_fullscreenWindow->close();
+        }
+        m_player.setVideoOutput(nullptr);
+        m_mediaStack->setCurrentWidget(m_coverLabel);
+    }
+
+    refreshVideoControls(track);
+}
+
+void MainWindow::applyVideoScale()
+{
+    const int mode = m_videoScaleCombo->currentData().toInt();
+    Qt::AspectRatioMode aspectMode = Qt::KeepAspectRatio;
+    if (mode == 1) {
+        aspectMode = Qt::KeepAspectRatioByExpanding;
+    } else if (mode == 2) {
+        aspectMode = Qt::IgnoreAspectRatio;
+    }
+
+    m_videoWidget->setAspectRatioMode(aspectMode);
+    if (m_fullscreenWindow) {
+        m_fullscreenWindow->setAspectRatioMode(aspectMode);
+    }
+}
+
+void MainWindow::toggleVideoFullscreen()
+{
+    const MusicTrack track = m_player.currentTrack();
+    if (!track.isVideo || m_audioOnlyVideo) {
+        return;
+    }
+
+    if (m_fullscreenWindow) {
+        m_fullscreenWindow->close();
+        return;
+    }
+
+    m_fullscreenWindow = new FullscreenVideoWindow(&m_player, m_language == Language::English, this);
+    m_fullscreenWindow->setAttribute(Qt::WA_DeleteOnClose);
+    m_fullscreenWindow->setAspectRatioMode(m_videoWidget->aspectRatioMode());
+    connect(m_fullscreenWindow, &FullscreenVideoWindow::closed, this, [this] {
+        m_fullscreenWindow = nullptr;
+        if (m_player.currentTrack().isVideo && !m_audioOnlyVideo) {
+            m_player.setVideoOutput(m_videoWidget);
+            m_mediaStack->setCurrentWidget(m_videoWidget);
+        }
+    });
+
+    m_player.setVideoOutput(m_fullscreenWindow->videoWidget());
+    m_fullscreenWindow->showFullScreen();
+    m_fullscreenWindow->raise();
+    m_fullscreenWindow->activateWindow();
+}
+
+void MainWindow::exitVideoFullscreen()
+{
+    if (m_fullscreenWindow) {
+        m_fullscreenWindow->close();
+    }
+}
+
+bool MainWindow::handleVideoKeyEvent(QKeyEvent *event, bool pressed)
+{
+    if (!event) {
+        return false;
+    }
+
+    const int key = event->key();
+    if (key == Qt::Key_Escape && pressed) {
+        exitVideoFullscreen();
+        return true;
+    }
+
+    if (key == Qt::Key_Space && pressed && !event->isAutoRepeat()) {
+        m_player.togglePlayPause();
+        return true;
+    }
+
+    if (key == Qt::Key_Left && pressed && !event->isAutoRepeat()) {
+        seekRelative(-5000);
+        return true;
+    }
+
+    if (key == Qt::Key_Right) {
+        if (pressed) {
+            if (!event->isAutoRepeat() && !m_rightKeyPressed) {
+                m_rightKeyPressed = true;
+                m_rightLongPressActive = false;
+                m_rightHoldTimer->start(450);
+            }
+            return true;
+        }
+
+        if (event->isAutoRepeat()) {
+            return true;
+        }
+
+        m_rightKeyPressed = false;
+        if (m_rightLongPressActive) {
+            m_rightLongPressActive = false;
+            m_player.setPlaybackRate(1.0);
+            setStatus(text(TextKey::Playing).arg(m_player.currentTrack().displayTitle()));
+        } else {
+            m_rightHoldTimer->stop();
+            seekRelative(5000);
+        }
+        return true;
+    }
+
+    return false;
+}
+
+void MainWindow::seekRelative(qint64 deltaMs)
+{
+    const qint64 current = m_positionSlider ? m_positionSlider->value() : 0;
+    const qint64 maximum = m_currentDurationMs > 0 ? m_currentDurationMs : (m_positionSlider ? m_positionSlider->maximum() : 0);
+    const qint64 target = qBound<qint64>(0, current + deltaMs, maximum);
+    m_player.seek(target);
+    if (m_positionSlider) {
+        m_positionSlider->setValue(static_cast<int>(target));
+    }
+    updatePositionLabel(target, m_currentDurationMs);
+}
+
+void MainWindow::setCoverFromImage(const QImage &image)
+{
+    if (!image.isNull()) {
+        setCoverFromPixmap(QPixmap::fromImage(image));
+    }
+}
+
+void MainWindow::setCoverFromPixmap(const QPixmap &pixmap)
+{
+    QPixmap source = pixmap.isNull() ? defaultCoverPixmap() : pixmap;
+    const QSize targetSize(CoverSize, CoverSize);
+    QPixmap scaled = source.scaled(targetSize, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+
+    const QRect cropRect((scaled.width() - targetSize.width()) / 2,
+                         (scaled.height() - targetSize.height()) / 2,
+                         targetSize.width(),
+                         targetSize.height());
+    scaled = scaled.copy(cropRect);
+
+    QPixmap rounded(targetSize);
+    rounded.fill(Qt::transparent);
+
+    QPainter painter(&rounded);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPainterPath path;
+    path.addRoundedRect(QRectF(QPointF(0, 0), QSizeF(targetSize)), 22, 22);
+    painter.setClipPath(path);
+    painter.drawPixmap(0, 0, scaled);
+    painter.end();
+
+    m_coverLabel->setPixmap(rounded);
+}
+
+QPixmap MainWindow::coverFromSidecarFile(const MusicTrack &track) const
+{
+    const QFileInfo info(track.filePath);
+    const QString dirPath = info.absolutePath();
+    const QString basePath = dirPath + "/" + info.completeBaseName();
+    const QStringList candidates = {
+        basePath + ".jpg",
+        basePath + ".jpeg",
+        basePath + ".png",
+        basePath + ".webp",
+        dirPath + "/cover.jpg",
+        dirPath + "/cover.png",
+        dirPath + "/folder.jpg",
+        dirPath + "/folder.png",
+        dirPath + "/album.jpg",
+        dirPath + "/album.png"
+    };
+
+    for (const QString &candidate : candidates) {
+        QPixmap pixmap;
+        if (QFileInfo::exists(candidate) && pixmap.load(candidate)) {
+            return pixmap;
+        }
+    }
+
+    return {};
+}
+
+QPixmap MainWindow::defaultCoverPixmap() const
+{
+    return QPixmap(":/images/default-cover.png");
 }
 
 QString MainWindow::text(TextKey key) const
@@ -465,25 +1099,42 @@ QString MainWindow::text(TextKey key) const
 
     switch (key) {
     case TextKey::WindowTitle:
-        return english ? QStringLiteral("MusicPlayer") : QStringLiteral("音乐播放器");
+        return english ? QStringLiteral("MusicPlayer") : QStringLiteral("本地音乐播放器");
+    case TextKey::AppSubtitle:
+        return english ? QStringLiteral("Local music and video, cover art, synced lyrics")
+                       : QStringLiteral("本地音乐与视频、封面展示、歌词同步");
     case TextKey::AddFolder:
         return english ? QStringLiteral("Add Folder") : QStringLiteral("添加文件夹");
+    case TextKey::ShowFolders:
+        return english ? QStringLiteral("Folders") : QStringLiteral("已添加文件夹");
     case TextKey::Rescan:
         return english ? QStringLiteral("Rescan") : QStringLiteral("重新扫描");
     case TextKey::SearchPlaceholder:
-        return english ? QStringLiteral("Search title, artist, album, or path") : QStringLiteral("搜索标题、歌手、专辑或路径");
+        return english ? QStringLiteral("Search local title, artist, album, type, or path")
+                       : QStringLiteral("搜索本地标题、歌手、专辑、类型或路径");
     case TextKey::LocalMusic:
-        return english ? QStringLiteral("Local Music") : QStringLiteral("本地音乐");
-    case TextKey::OfficialPlatformAccess:
-        return english ? QStringLiteral("Official Platform Access") : QStringLiteral("官方平台接入");
+        return english ? QStringLiteral("Local Library") : QStringLiteral("本地媒体库");
     case TextKey::Settings:
         return english ? QStringLiteral("Settings") : QStringLiteral("设置");
     case TextKey::Language:
         return english ? QStringLiteral("Language") : QStringLiteral("语言");
+    case TextKey::Theme:
+        return english ? QStringLiteral("Theme") : QStringLiteral("主题");
+    case TextKey::SwitchToLight:
+        return english ? QStringLiteral("Light") : QStringLiteral("浅色");
+    case TextKey::SwitchToDark:
+        return english ? QStringLiteral("Dark") : QStringLiteral("深色");
     case TextKey::Playback:
         return english ? QStringLiteral("Playback") : QStringLiteral("播放控制");
+    case TextKey::Lyrics:
+        return english ? QStringLiteral("Lyrics") : QStringLiteral("歌词");
     case TextKey::NoTrackSelected:
-        return english ? QStringLiteral("No track selected") : QStringLiteral("未选择歌曲");
+        return english ? QStringLiteral("No media selected") : QStringLiteral("未选择媒体");
+    case TextKey::NoArtist:
+        return english ? QStringLiteral("Unknown artist") : QStringLiteral("未知歌手");
+    case TextKey::NoLyrics:
+        return english ? QStringLiteral("No synced lyrics found. Put a .lrc file beside the media with the same name.")
+                       : QStringLiteral("未找到同步歌词。请将同名 .lrc 文件放在媒体文件旁边。");
     case TextKey::Ready:
         return english ? QStringLiteral("Ready") : QStringLiteral("就绪");
     case TextKey::Previous:
@@ -508,6 +1159,8 @@ QString MainWindow::text(TextKey key) const
         return english ? QStringLiteral("Shuffle") : QStringLiteral("随机播放");
     case TextKey::Favorite:
         return english ? QStringLiteral("Fav") : QStringLiteral("收藏");
+    case TextKey::Type:
+        return english ? QStringLiteral("Type") : QStringLiteral("类型");
     case TextKey::Title:
         return english ? QStringLiteral("Title") : QStringLiteral("标题");
     case TextKey::Artist:
@@ -518,51 +1171,57 @@ QString MainWindow::text(TextKey key) const
         return english ? QStringLiteral("Length") : QStringLiteral("时长");
     case TextKey::Path:
         return english ? QStringLiteral("Path") : QStringLiteral("路径");
-    case TextKey::Platform:
-        return english ? QStringLiteral("Platform") : QStringLiteral("平台");
-    case TextKey::Status:
-        return english ? QStringLiteral("Status") : QStringLiteral("状态");
-    case TextKey::Requirement:
-        return english ? QStringLiteral("Requirement") : QStringLiteral("接入要求");
+    case TextKey::Audio:
+        return english ? QStringLiteral("Audio") : QStringLiteral("音频");
+    case TextKey::Video:
+        return english ? QStringLiteral("Video") : QStringLiteral("视频");
     case TextKey::Unknown:
         return english ? QStringLiteral("Unknown") : QStringLiteral("未知");
     case TextKey::Yes:
         return english ? QStringLiteral("Yes") : QStringLiteral("是");
     case TextKey::AddMusicFolder:
-        return english ? QStringLiteral("Add Music Folder") : QStringLiteral("添加音乐文件夹");
+        return english ? QStringLiteral("Add Media Folder") : QStringLiteral("添加媒体文件夹");
+    case TextKey::AddedFolders:
+        return english ? QStringLiteral("Added folders") : QStringLiteral("已添加的文件夹");
+    case TextKey::NoFolders:
+        return english ? QStringLiteral("No folders have been added yet.") : QStringLiteral("还没有添加任何文件夹。");
     case TextKey::PlaybackProblem:
         return english ? QStringLiteral("Playback problem") : QStringLiteral("播放问题");
     case TextKey::LibraryError:
-        return english ? QStringLiteral("Library error") : QStringLiteral("音乐库错误");
+        return english ? QStringLiteral("Library error") : QStringLiteral("媒体库错误");
     case TextKey::LibraryOpenFailed:
-        return english ? QStringLiteral("Library failed to open: %1") : QStringLiteral("音乐库打开失败：%1");
+        return english ? QStringLiteral("Library failed to open: %1") : QStringLiteral("媒体库打开失败：%1");
     case TextKey::FolderScanned:
-        return english ? QStringLiteral("Folder scanned. %1 file(s) added or updated.") : QStringLiteral("文件夹扫描完成，已添加或更新 %1 个文件。");
+        return english ? QStringLiteral("Folder scanned. %1 file(s) added or updated.")
+                       : QStringLiteral("文件夹扫描完成，已添加或更新 %1 个文件。");
     case TextKey::RescanComplete:
-        return english ? QStringLiteral("Rescan complete. %1 file(s) added or updated.") : QStringLiteral("重新扫描完成，已添加或更新 %1 个文件。");
+        return english ? QStringLiteral("Rescan complete. %1 file(s) added or updated.")
+                       : QStringLiteral("重新扫描完成，已添加或更新 %1 个文件。");
     case TextKey::Playing:
         return english ? QStringLiteral("Playing %1") : QStringLiteral("正在播放：%1");
     case TextKey::NowPlaying:
         return english ? QStringLiteral("Now playing: %1") : QStringLiteral("正在播放：%1");
     case TextKey::LocalTracks:
-        return english ? QStringLiteral("%1 local track(s)") : QStringLiteral("本地音乐：%1 首");
-    case TextKey::QqMusic:
-        return english ? QStringLiteral("QQ Music") : QStringLiteral("QQ 音乐");
-    case TextKey::NeteaseMusic:
-        return english ? QStringLiteral("NetEase Cloud Music") : QStringLiteral("网易云音乐");
-    case TextKey::KugouMusic:
-        return english ? QStringLiteral("Kugou Music") : QStringLiteral("酷狗音乐");
-    case TextKey::QqMusicRequirement:
-        return english ? QStringLiteral("Requires an official authorization API or official client launch flow.")
-                       : QStringLiteral("需要官方授权接口或官方客户端跳转方案。");
-    case TextKey::NeteaseRequirement:
-        return english ? QStringLiteral("Requires an official authorization API or official web/client launch flow.")
-                       : QStringLiteral("需要官方授权接口或官方网页/客户端跳转方案。");
-    case TextKey::KugouRequirement:
-        return english ? QStringLiteral("Requires an official authorization API or TME-related authorization service.")
-                       : QStringLiteral("需要官方授权接口或 TME 相关授权服务。");
-    case TextKey::NotConfigured:
-        return english ? QStringLiteral("Not configured") : QStringLiteral("未配置");
+        return english ? QStringLiteral("%1 local item(s)") : QStringLiteral("本地媒体：%1 个");
+    case TextKey::ShortcutHint:
+        return english ? QStringLiteral("Space: play/pause  |  Ctrl+Left/Right: previous/next")
+                       : QStringLiteral("空格：播放/暂停  |  Ctrl+左右：上一首/下一首");
+    case TextKey::VideoControls:
+        return english ? QStringLiteral("Video") : QStringLiteral("视频");
+    case TextKey::VideoScale:
+        return english ? QStringLiteral("Scale") : QStringLiteral("缩放");
+    case TextKey::Fit:
+        return english ? QStringLiteral("Fit") : QStringLiteral("适应");
+    case TextKey::Fill:
+        return english ? QStringLiteral("Fill") : QStringLiteral("填充");
+    case TextKey::Stretch:
+        return english ? QStringLiteral("Stretch") : QStringLiteral("拉伸");
+    case TextKey::Fullscreen:
+        return english ? QStringLiteral("Fullscreen") : QStringLiteral("全屏");
+    case TextKey::AudioOnly:
+        return english ? QStringLiteral("Audio Only") : QStringLiteral("仅音频");
+    case TextKey::ShowVideo:
+        return english ? QStringLiteral("Show Video") : QStringLiteral("显示视频");
     case TextKey::Chinese:
         return english ? QStringLiteral("Chinese") : QStringLiteral("中文");
     case TextKey::English:
@@ -580,6 +1239,16 @@ QString MainWindow::languageCode() const
 MainWindow::Language MainWindow::languageFromCode(const QString &code) const
 {
     return code.compare("en", Qt::CaseInsensitive) == 0 ? Language::English : Language::Chinese;
+}
+
+QString MainWindow::themeCode() const
+{
+    return m_theme == Theme::Light ? QStringLiteral("light") : QStringLiteral("dark");
+}
+
+MainWindow::Theme MainWindow::themeFromCode(const QString &code) const
+{
+    return code.compare("light", Qt::CaseInsensitive) == 0 ? Theme::Light : Theme::Dark;
 }
 
 int MainWindow::rowToTrackIndex(int row) const
