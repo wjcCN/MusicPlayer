@@ -1,5 +1,7 @@
 #include "ui/FullscreenVideoWindow.h"
 
+#include "ui/VideoStateOverlay.h"
+
 #include <QApplication>
 #include <QCloseEvent>
 #include <QEvent>
@@ -27,6 +29,7 @@ FullscreenVideoWindow::FullscreenVideoWindow(PlaybackController *player, bool en
     m_videoWidget->setObjectName("fullscreenVideoSurface");
     m_videoWidget->setFocusPolicy(Qt::StrongFocus);
     m_videoWidget->installEventFilter(this);
+    m_videoStateOverlay = new VideoStateOverlay(m_videoWidget);
 
     m_positionSlider = new QSlider(Qt::Horizontal, this);
     m_positionSlider->setObjectName("fullscreenPositionSlider");
@@ -156,6 +159,18 @@ bool FullscreenVideoWindow::eventFilter(QObject *watched, QEvent *event)
 void FullscreenVideoWindow::applyPlaybackState(QMediaPlayer::PlaybackState state)
 {
     m_playPauseButton->setText(state == QMediaPlayer::PlayingState ? pauseText() : playText());
+
+    if (!m_videoStateOverlay) {
+        return;
+    }
+
+    if (state == QMediaPlayer::PlayingState) {
+        m_videoStateOverlay->showPlayingIndicator();
+    } else if (state == QMediaPlayer::PausedState) {
+        m_videoStateOverlay->showPausedIndicator();
+    } else {
+        m_videoStateOverlay->hideIndicator();
+    }
 }
 
 void FullscreenVideoWindow::updatePosition(qint64 positionMs)

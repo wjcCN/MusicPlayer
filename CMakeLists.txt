@@ -25,6 +25,7 @@ set(PROJECT_HEADERS
     include/ui/FolderManagerDialog.h
     include/ui/FullscreenVideoWindow.h
     include/ui/MainWindow.h
+    include/ui/VideoStateOverlay.h
 )
 
 set(PROJECT_SOURCES
@@ -36,6 +37,7 @@ set(PROJECT_SOURCES
     src/ui/FolderManagerDialog.cpp
     src/ui/FullscreenVideoWindow.cpp
     src/ui/MainWindow.cpp
+    src/ui/VideoStateOverlay.cpp
 )
 
 set(PROJECT_RESOURCES
@@ -88,10 +90,10 @@ target_link_libraries(${PROJECT_NAME}
 source_group("Header Files\\Core" FILES include/core/MusicTrack.h include/core/PlaybackController.h include/core/LyricsParser.h)
 source_group("Header Files\\Data" FILES include/data/MusicLibrary.h)
 source_group("Header Files\\Providers" FILES include/providers/LocalProvider.h)
-source_group("Header Files\\UI" FILES include/ui/MainWindow.h include/ui/FolderManagerDialog.h include/ui/FullscreenVideoWindow.h)
+source_group("Header Files\\UI" FILES include/ui/MainWindow.h include/ui/FolderManagerDialog.h include/ui/FullscreenVideoWindow.h include/ui/VideoStateOverlay.h)
 source_group("Source Files\\Core" FILES src/core/PlaybackController.cpp src/core/LyricsParser.cpp)
 source_group("Source Files\\Data" FILES src/data/MusicLibrary.cpp)
 source_group("Source Files\\Providers" FILES src/providers/LocalProvider.cpp)
-source_group("Source Files\\UI" FILES src/ui/MainWindow.cpp src/ui/FolderManagerDialog.cpp src/ui/FullscreenVideoWindow.cpp src/main.cpp)
+source_group("Source Files\\UI" FILES src/ui/MainWindow.cpp src/ui/FolderManagerDialog.cpp src/ui/FullscreenVideoWindow.cpp src/ui/VideoStateOverlay.cpp src/main.cpp)
 source_group("Form Files" FILES ${PROJECT_UI_REFERENCES})
 source_group("Resource Files" FILES ${PROJECT_RESOURCES})

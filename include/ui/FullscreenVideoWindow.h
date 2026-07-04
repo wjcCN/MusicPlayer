@@ -12,6 +12,7 @@ class QPushButton;
 class QSlider;
 class QTimer;
 class QVideoWidget;
+class VideoStateOverlay;
 
 class FullscreenVideoWindow final : public QDialog
 {
@@ -44,6 +45,7 @@ private:
 
     PlaybackController *m_player = nullptr;
     QVideoWidget *m_videoWidget = nullptr;
+    VideoStateOverlay *m_videoStateOverlay = nullptr;
     QSlider *m_positionSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
     QPushButton *m_playPauseButton = nullptr;

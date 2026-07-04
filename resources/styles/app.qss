@@ -169,6 +169,10 @@ QListWidget#folderList {
     selection-color: @heading;
 }
 
+QTableWidget#libraryTable {
+    outline: 0;
+}
+
 QHeaderView::section {
     background-color: @panelDeep;
     color: @muted;
@@ -178,8 +182,16 @@ QHeaderView::section {
 }
 
 QTableWidget::item {
-    padding: 8px;
+    padding: 10px 8px;
     border-bottom: 1px solid @border;
+}
+
+QTableWidget#libraryTable::item:selected {
+    background-color: @selectionBg;
+    color: @heading;
+    border: 1px solid @accent;
+    border-radius: 11px;
+    padding: 9px 7px;
 }
 
 QListWidget::item {

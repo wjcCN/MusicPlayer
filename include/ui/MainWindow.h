@@ -24,6 +24,7 @@ class QKeyEvent;
 class QStackedWidget;
 class QTimer;
 class QVideoWidget;
+class VideoStateOverlay;
 
 class MainWindow final : public QWidget
 {
@@ -190,6 +191,7 @@ private:
     QTableWidget *m_libraryTable = nullptr;
     QStackedWidget *m_mediaStack = nullptr;
     QVideoWidget *m_videoWidget = nullptr;
+    VideoStateOverlay *m_videoStateOverlay = nullptr;
     FullscreenVideoWindow *m_fullscreenWindow = nullptr;
     QSlider *m_positionSlider = nullptr;
     QSlider *m_volumeSlider = nullptr;

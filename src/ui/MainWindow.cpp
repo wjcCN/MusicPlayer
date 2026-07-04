@@ -1,8 +1,9 @@
-#include "ui/MainWindow.h"
+﻿#include "ui/MainWindow.h"
 
 #include "core/LyricsParser.h"
 #include "ui/FolderManagerDialog.h"
 #include "ui/FullscreenVideoWindow.h"
+#include "ui/VideoStateOverlay.h"
 
 #include <QAbstractItemView>
 #include <QApplication>
@@ -167,6 +168,7 @@ void MainWindow::buildUi()
     m_libraryTable->setColumnWidth(TypeColumn, 72);
     m_libraryTable->setColumnWidth(DurationColumn, 90);
     m_libraryTable->setShowGrid(false);
+    m_libraryTable->verticalHeader()->setDefaultSectionSize(44);
 
     auto *libraryPanel = new QFrame(this);
     libraryPanel->setObjectName("libraryPanel");
@@ -190,6 +192,7 @@ void MainWindow::buildUi()
     m_videoWidget->setFocusPolicy(Qt::StrongFocus);
     m_videoWidget->installEventFilter(this);
     qApp->installEventFilter(this);
+    m_videoStateOverlay = new VideoStateOverlay(m_videoWidget);
 
     m_rightHoldTimer = new QTimer(this);
     m_rightHoldTimer->setSingleShot(true);
@@ -672,6 +675,7 @@ QString MainWindow::themeStyleSheet() const
     style.replace("@buttonText", light ? "#1f2937" : "#eef4fb");
     style.replace("@accentText", light ? "#0f766e" : "#f8ffff");
     style.replace("@accentSoft", light ? "#ccfbf1" : "#1d5b62");
+    style.replace("@selectionBg", light ? "rgba(204, 251, 241, 150)" : "rgba(45, 212, 191, 92)");
     style.replace("@lyricActive", light ? "#0f766e" : "#f7d88f");
     style.replace("@windowBg", light ? "#f4f7fb" : "#0b1018");
     style.replace("@panelDeep", light ? "#eaf0f7" : "#080d14");
@@ -757,6 +761,23 @@ void MainWindow::setStatus(const QString &message)
 void MainWindow::applyPlaybackState(QMediaPlayer::PlaybackState state)
 {
     m_playPauseButton->setText(state == QMediaPlayer::PlayingState ? text(TextKey::Pause) : text(TextKey::Play));
+
+    const MusicTrack track = m_player.currentTrack();
+    const bool showVideoFeedback = track.isVideo && !m_audioOnlyVideo && m_videoStateOverlay;
+    if (!showVideoFeedback) {
+        if (m_videoStateOverlay) {
+            m_videoStateOverlay->hideIndicator();
+        }
+        return;
+    }
+
+    if (state == QMediaPlayer::PlayingState) {
+        m_videoStateOverlay->showPlayingIndicator();
+    } else if (state == QMediaPlayer::PausedState) {
+        m_videoStateOverlay->showPausedIndicator();
+    } else {
+        m_videoStateOverlay->hideIndicator();
+    }
 }
 
 void MainWindow::updatePositionLabel(qint64 positionMs, qint64 durationMs)
@@ -901,9 +922,15 @@ void MainWindow::syncVideoOutput()
             m_player.setVideoOutput(m_videoWidget);
         }
         m_mediaStack->setCurrentWidget(m_videoWidget);
+        if (m_videoStateOverlay) {
+            m_videoStateOverlay->raise();
+        }
     } else {
         if (m_fullscreenWindow) {
             m_fullscreenWindow->close();
+        }
+        if (m_videoStateOverlay) {
+            m_videoStateOverlay->hideIndicator();
         }
         m_player.setVideoOutput(nullptr);
         m_mediaStack->setCurrentWidget(m_coverLabel);
@@ -1099,7 +1126,7 @@ QString MainWindow::text(TextKey key) const
 
     switch (key) {
     case TextKey::WindowTitle:
-        return english ? QStringLiteral("MusicPlayer") : QStringLiteral("本地音乐播放器");
+        return english ? QStringLiteral("MusicPlayer") : QStringLiteral("本地媒体播放器");
     case TextKey::AppSubtitle:
         return english ? QStringLiteral("Local music and video, cover art, synced lyrics")
                        : QStringLiteral("本地音乐与视频、封面展示、歌词同步");
