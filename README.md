@@ -1,5 +1,11 @@
 # MusicPlayer
 
+## 数据说明
+
+本项目不会把个人媒体目录、播放记录或本地数据库提交到 GitHub，也不会把这些数据打包进发布压缩包。用户添加的文件夹会保存在当前 Windows 用户的应用数据目录中的 SQLite 数据库里。
+
+为避免开发环境和发布包互相读取同一份本地数据，Debug/VS 运行版继续使用 `wjcCN/MusicPlayer` 数据目录，Release/下载发布版使用独立的 `wjcCN/MusicPlayerRelease` 数据目录。
+
 一个基于 Qt Widgets 的 Windows 本地音乐与视频播放器。项目目标是提供轻量、清晰、可发布的桌面播放器体验：扫描本地文件夹、管理媒体库、播放音频与视频、显示封面与同步歌词，并支持深浅色主题。
 
 <p align="center">
