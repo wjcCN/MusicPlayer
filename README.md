@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/wjcCN/MusicPlayer/releases/tag/v1.0"><img alt="Release" src="https://img.shields.io/badge/release-v1.0-2dd4bf"></a>
+  <a href="https://github.com/wjcCN/MusicPlayer/releases/tag/v1.0.1"><img alt="Release" src="https://img.shields.io/badge/release-v1.0.1-2dd4bf"></a>
   <img alt="Qt" src="https://img.shields.io/badge/Qt-6.11.1-41CD52">
   <img alt="C++" src="https://img.shields.io/badge/C%2B%2B-17-00599C">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078D4">
@@ -32,14 +32,14 @@
 - **视频播放**：支持本地视频播放、全屏播放、仅音频模式和视频缩放模式。
 - **快捷操作**：空格暂停/继续，左右方向键快退/快进，视频全屏下 `Esc` 退出。
 - **主题与语言**：内置深色/浅色主题，默认中文，可切换英文。
-- **Windows 发布**：已使用 `windeployqt` 打包 Qt 运行库与插件，可直接下载 v1.0 发布包。
+- **Windows 发布**：已使用 `windeployqt` 打包 Qt 运行库与插件，可直接下载 v1.0.1 发布包。
 
 ## 下载
 
-当前版本：**v1.0**
+当前版本：**v1.0.1**
 
-- [GitHub Release 页面](https://github.com/wjcCN/MusicPlayer/releases/tag/v1.0)
-- [Windows x64 压缩包](https://github.com/wjcCN/MusicPlayer/releases/download/v1.0/MusicPlayer-v1.0-windows-x64.zip)
+- [GitHub Release 页面](https://github.com/wjcCN/MusicPlayer/releases/tag/v1.0.1)
+- [Windows x64 压缩包](https://github.com/wjcCN/MusicPlayer/releases/download/v1.0.1/MusicPlayer-v1.0.1-windows-x64.zip)
 
 下载后解压，运行 `MusicPlayer.exe` 即可。
 
@@ -99,18 +99,19 @@ cmake --build out/build/release --config Release --target MusicPlayer
 发布打包：
 
 ```powershell
-windeployqt --release --compiler-runtime --dir out/package/MusicPlayer-v1.0 `
-  out/package/MusicPlayer-v1.0/MusicPlayer.exe
+windeployqt --release --compiler-runtime --dir out/package/MusicPlayer-v1.0.1 `
+  out/package/MusicPlayer-v1.0.1/MusicPlayer.exe
 ```
 
 ## 当前状态
 
-v1.0 聚焦本地播放器能力：
+v1.0.1 聚焦本地播放器能力，并修复开发版与发布版共用本机数据目录的问题：
 
 - 稳定播放本地音频与视频
 - 管理本地媒体库和添加的文件夹
 - 展示封面、歌词、播放队列与基础媒体信息
 - 提供可下载的 Windows x64 发布包
+- Release 发布包使用独立的本机数据目录，避免自动载入开发环境中的个人媒体文件夹
 
 后续可以继续改进：
 
