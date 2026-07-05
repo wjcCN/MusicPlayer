@@ -1,0 +1,50 @@
+<svg width="1200" height="680" viewBox="0 0 1200 680" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="680" rx="34" fill="#edf4fb"/>
+  <rect x="34" y="34" width="1132" height="612" rx="30" fill="#f8fbff" stroke="#c9d8e8" stroke-width="2"/>
+  <rect x="68" y="70" width="610" height="430" rx="24" fill="#ffffff" stroke="#d8e4f0"/>
+  <rect x="704" y="70" width="428" height="430" rx="24" fill="#ffffff" stroke="#d8e4f0"/>
+  <text x="72" y="48" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="24" font-weight="700" fill="#122033">MusicPlayer</text>
+  <text x="220" y="48" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" fill="#64748b">Qt Windows 本地音乐与视频播放器</text>
+
+  <rect x="92" y="96" width="132" height="36" rx="18" fill="#ccfbf1" stroke="#55c9ba"/>
+  <text x="122" y="120" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#0f766e">添加文件夹</text>
+  <rect x="238" y="96" width="132" height="36" rx="18" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="268" y="120" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" fill="#334155">已添加文件夹</text>
+  <rect x="386" y="96" width="254" height="36" rx="18" fill="#f8fafc" stroke="#cbd5e1"/>
+  <text x="408" y="120" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" fill="#94a3b8">搜索本地标题、歌手、专辑...</text>
+
+  <rect x="92" y="156" width="548" height="296" rx="16" fill="#eef4fa"/>
+  <rect x="92" y="156" width="548" height="42" rx="16" fill="#e2edf8"/>
+  <text x="116" y="183" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#334155">类型</text>
+  <text x="210" y="183" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#334155">标题</text>
+  <text x="410" y="183" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#334155">歌手</text>
+  <text x="544" y="183" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" font-weight="700" fill="#334155">时长</text>
+  <g font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" fill="#1f2937">
+    <text x="116" y="228">音频</text><text x="210" y="228">Wild - Monogem</text><text x="410" y="228">未知</text><text x="544" y="228">03:35</text>
+    <text x="116" y="272">音频</text><text x="210" y="272">热夏 Summer</text><text x="410" y="272">未知</text><text x="544" y="272">02:18</text>
+    <text x="116" y="316">视频</text><text x="210" y="316">Apex Legends DVR</text><text x="410" y="316">未知</text><text x="544" y="316">05:00</text>
+    <text x="116" y="360">音频</text><text x="210" y="360">兄弟难当 Live</text><text x="410" y="360">未知</text><text x="544" y="360">04:11</text>
+  </g>
+
+  <rect x="748" y="108" width="340" height="210" rx="22" fill="#101826"/>
+  <circle cx="918" cy="213" r="82" fill="#1e293b"/>
+  <circle cx="918" cy="213" r="48" fill="#2dd4bf" opacity=".22"/>
+  <circle cx="918" cy="213" r="12" fill="#f7d88f"/>
+  <path d="M780 214 C826 160 870 266 918 213 C966 160 1010 266 1060 214" stroke="#5eead4" stroke-width="4" fill="none" opacity=".8"/>
+  <text x="803" y="362" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="28" font-weight="800" fill="#111827">Wild - Monogem</text>
+  <text x="876" y="398" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="18" fill="#64748b">未知歌手</text>
+  <rect x="748" y="424" width="340" height="44" rx="16" fill="#eef4fa" stroke="#d8e4f0"/>
+  <text x="812" y="452" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="16" fill="#94a3b8">同步歌词 / 视频预览 / 封面展示</text>
+
+  <rect x="68" y="524" width="1064" height="86" rx="22" fill="#ffffff" stroke="#c9d8e8"/>
+  <text x="96" y="558" font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="17" font-weight="700" fill="#122033">正在播放：Wild - Monogem</text>
+  <rect x="96" y="575" width="740" height="8" rx="4" fill="#d8e4f0"/>
+  <rect x="96" y="575" width="265" height="8" rx="4" fill="#0f766e"/>
+  <circle cx="361" cy="579" r="10" fill="#ffffff" stroke="#0f766e" stroke-width="3"/>
+  <g font-family="Microsoft YaHei UI, Segoe UI, sans-serif" font-size="15" fill="#334155">
+    <text x="96" y="604">00:58 / 03:35</text>
+    <text x="886" y="582">上一首</text>
+    <text x="956" y="582">暂停</text>
+    <text x="1018" y="582">下一首</text>
+  </g>
+</svg>
